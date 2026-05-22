@@ -5,13 +5,19 @@ from __future__ import annotations
 import os
 import json
 import hashlib
+import shutil
+import sqlite3
 import threading
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Callable
 import logging
 
-from core.checkpoint import load_meta as load_ckpt_meta
+import yaml
+from openai import OpenAI
+
+from core.checkpoint import load as ckpt_load, clear as ckpt_clear, load_meta as load_ckpt_meta
+from core.main import run_pipeline
 
 ROOT = Path(__file__).parent.parent
 
@@ -69,7 +75,6 @@ def checkpoint_id(file_bytes: bytes, profile: str) -> str:
 
 
 def check_checkpoint(file_bytes: bytes, profile: str) -> dict:
-    from core.checkpoint import load as ckpt_load
     h = hashlib.md5(file_bytes).hexdigest()[:8]
     ckpt_root = ROOT / "output" / "_checkpoints"
     if not ckpt_root.exists():
@@ -85,7 +90,6 @@ def check_checkpoint(file_bytes: bytes, profile: str) -> dict:
 
 
 def clear_checkpoint(file_bytes: bytes, profile: str):
-    import shutil
     h = hashlib.md5(file_bytes).hexdigest()[:8]
     ckpt_root = ROOT / "output" / "_checkpoints"
     if not ckpt_root.exists():
@@ -356,8 +360,7 @@ def list_profiles() -> List[str]:
 
 
 def save_uploaded_profile(filename: str, content: bytes) -> str:
-    import yaml as _yaml
-    _yaml.safe_load(content)
+    yaml.safe_load(content)
     stem = Path(filename).stem
     pdir = ROOT / "profiles"
     pdir.mkdir(exist_ok=True)
@@ -389,7 +392,6 @@ def embed_db_term_count() -> int:
     if not db_path.exists():
         return 0
     try:
-        import sqlite3
         with sqlite3.connect(str(db_path)) as conn:
             return conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0]
     except Exception:
@@ -398,7 +400,6 @@ def embed_db_term_count() -> int:
 
 def test_api_connection(cfg: RunConfig) -> tuple:
     try:
-        from openai import OpenAI
         client = OpenAI(api_key=cfg.api_key, base_url=cfg.api_base, timeout=30)
         resp = client.models.list()
         return True, f"Connected — {len(resp.data)} models available"
@@ -464,13 +465,6 @@ class ProcessingTask:
     def _run(self, source_path: str, glossary_path: str, cfg: RunConfig, on_done,
              src_col: int = 0, gl_cn_col: int = 0, gl_en_col: int = 1, src_bytes: bytes = b""):
         try:
-            from core.main import run_pipeline
-            from core.checkpoint import clear as ckpt_clear
-            import config as pipe_cfg
-
-            pipe_cfg.EXTRACTOR_CONFIG["max_concurrent"] = cfg.max_concurrent
-            pipe_cfg.EXTRACTOR_CONFIG["max_tokens"] = cfg.max_tokens
-
             ckpt_root = ROOT / "output" / "_checkpoints"
             ckpt_root.mkdir(parents=True, exist_ok=True)
             h = hashlib.md5(src_bytes).hexdigest()[:8]
@@ -485,6 +479,8 @@ class ProcessingTask:
                 checkpoint_dir=ckpt_dir,
                 src_col=src_col, gl_cn_col=gl_cn_col, gl_en_col=gl_en_col,
                 embed_workers=cfg.embed_workers,
+                max_concurrent=cfg.max_concurrent,
+                max_tokens=cfg.max_tokens,
             )
             ckpt_clear(ckpt_dir)
             self.results = results

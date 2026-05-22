@@ -357,12 +357,8 @@ def match_and_translate(extracted: List[dict], glossary: dict, profile: dict,
     refs = embed_store.search(query_terms) if embed_store else []
 
     for i, t in enumerate(need_translate):
-        cn_ref, sim = refs[i]
-        if cn_ref not in glossary:
-            # stale DB entry for a term no longer in current glossary
-            cn_ref = glossary_keys[0] if glossary_keys else ""
-            sim = 0.0
-        en_ref = glossary[cn_ref][1] if cn_ref else ""
+        cn_ref, sim = refs[i] if i < len(refs) else ("", 0.0)
+        en_ref = glossary[cn_ref][1] if cn_ref and cn_ref in glossary else ""
         t["_ref_term"] = cn_ref
         t["_ref_trans"] = en_ref
         t["_ref_sim"] = sim
@@ -399,7 +395,8 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
                  output_dir: str = "", raw_dir: str = "", checkpoint_dir: str = "",
                  progress_callback: callable = None,
                  src_col: int = 0, gl_cn_col: int = 0, gl_en_col: int = 1,
-                 embed_workers: int = 16) -> List[dict]:
+                 embed_workers: int = 16,
+                 max_concurrent: int = None, max_tokens: int = None) -> List[dict]:
 
     if not output_dir:
         output_dir = "output"
@@ -436,7 +433,7 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
         progress_callback("loading", 1, 1, f"{len(texts)} texts loaded, {len(glossary_keys)} glossary terms")
         progress_callback("extracting", 0, 1, "即将开始提取…")
     logger.info("Extracting terms...")
-    extracted = extract_terms(texts, profile, api_key, base_url, model, output_dir=output_dir, raw_dir=raw_dir, checkpoint_dir=checkpoint_dir, glossary_keys=glossary_keys, progress_callback=progress_callback)
+    extracted = extract_terms(texts, profile, api_key, base_url, model, output_dir=output_dir, raw_dir=raw_dir, checkpoint_dir=checkpoint_dir, glossary_keys=glossary_keys, progress_callback=progress_callback, concurrent=max_concurrent, max_tokens=max_tokens)
 
     filterable = set(profile.get("filterable_categories", []))
     if filterable:
