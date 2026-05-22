@@ -18,6 +18,7 @@ from ui.ui_backend import (
     list_profiles, save_uploaded_profile, delete_profile,
     test_api_connection, get_profile_template, get_profile_content,
     save_persisted_config, check_checkpoint, clear_checkpoint,
+    reset_embed_db, embed_db_term_count,
 )
 
 st.set_page_config(page_title="游戏术语提取工具", page_icon="🎮", layout="wide")
@@ -195,8 +196,26 @@ if page_id == "settings":
 
 
         st.divider()
+        st.subheader("向量库管理")
+        db_count = embed_db_term_count()
+        if db_count > 0:
+            st.caption(f"当前向量库：{db_count} 条术语")
+            st.info(
+                "**正常情况下无需手动重置。** 每次运行时，新增的术语会自动加入向量库。\n\n"
+                "仅在以下情况点击重置：\n"
+                "- 切换了 Embedding 模型（切换后旧向量无效）\n"
+                "- 术语表大幅缩减、需要清除旧向量\n"
+                "- 向量库出现异常"
+            )
+            if st.button("重置向量库（下次运行时重建）", type="secondary"):
+                reset_embed_db()
+                st.success("向量库已删除，下次运行时将自动全量重建。")
+                st.rerun()
+        else:
+            st.caption("向量库尚未构建，首次运行时将自动创建。")
 
-        col_s1, col_s2 = st.columns(2)
+        st.divider()
+
         cfg.max_concurrent = st.slider("LLM 提取并发", 1, 100, cfg.max_concurrent,
                                        help="同时发起的 LLM 提取请求数")
         cfg.embed_workers = st.slider("Embedding 并发", 1, 100, cfg.embed_workers,

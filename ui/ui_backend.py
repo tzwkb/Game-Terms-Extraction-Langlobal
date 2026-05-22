@@ -394,6 +394,27 @@ def delete_profile(name: str):
 # API test
 # ═══════════════════════════════════════════════════════════
 
+def reset_embed_db() -> int:
+    """Delete the glossary embedding DB. Returns 1 if deleted, 0 if not found."""
+    db_path = ROOT / "database" / "glossary_embeddings.db"
+    if db_path.exists():
+        db_path.unlink()
+        return 1
+    return 0
+
+
+def embed_db_term_count() -> int:
+    db_path = ROOT / "database" / "glossary_embeddings.db"
+    if not db_path.exists():
+        return 0
+    try:
+        import sqlite3
+        with sqlite3.connect(str(db_path)) as conn:
+            return conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0]
+    except Exception:
+        return 0
+
+
 def test_api_connection(cfg: RunConfig) -> tuple:
     try:
         from openai import OpenAI
