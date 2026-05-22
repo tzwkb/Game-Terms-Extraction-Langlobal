@@ -403,12 +403,6 @@ def match_and_translate(extracted: List[dict], glossary: dict, profile: dict,
     return exact_matched + translated
 
 
-def _embed_existing(embed_store: EmbedStore) -> set:
-    import sqlite3
-    with sqlite3.connect(embed_store.db_path) as conn:
-        return set(r[0] for r in conn.execute("SELECT term FROM embeddings").fetchall())
-
-
 def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yanyun",
                  api_key: str = "", base_url: str = "https://api.openai.com/v1",
                  model: str = "gemini-3.1-pro-preview",
@@ -428,15 +422,10 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
     db_path = ROOT / "database" / "glossary_embeddings.db"
     db_path.parent.mkdir(exist_ok=True)
     embed_store = EmbedStore(str(db_path), api_key, base_url)
-    new_term_count = len([t for t in glossary_keys if t not in _embed_existing(embed_store)])
-    if new_term_count > 0:
-        if progress_callback:
-            progress_callback("loading", 0, 1, f"正在更新术语向量库 (+{new_term_count} 条新术语)…")
-        logger.info(f"Updating embedding store: {new_term_count} new terms out of {len(glossary_keys)}...")
-        embed_store.build(list(glossary_keys), progress=progress_callback, workers=embed_workers)
-        logger.info(f"Embedding store updated: {embed_store.count} terms total")
-    else:
-        logger.info(f"Embedding store up-to-date: {embed_store.count} terms")
+    if progress_callback:
+        progress_callback("loading", 0, 1, f"同步术语向量库 ({len(glossary_keys)} 条)…")
+    added, removed = embed_store.sync(list(glossary_keys), progress=progress_callback, workers=embed_workers)
+    logger.info(f"Embedding store synced: +{added} added, -{removed} removed, {embed_store.count} total")
 
     df_src = pd.read_excel(source_path)
     texts = df_src.iloc[:, src_col].dropna().astype(str).str.strip().tolist()

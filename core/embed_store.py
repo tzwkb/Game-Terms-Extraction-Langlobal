@@ -86,6 +86,26 @@ class EmbedStore:
                     progress("loading", min(done_count[0], total), total,
                              f"术语向量库: {min(done_count[0], total)}/{total}")
 
+    def sync(self, terms: list, batch_size: int = 256, progress: callable = None, workers: int = 8) -> tuple:
+        """Sync DB to exactly match `terms`: add new entries, remove stale ones.
+
+        Returns (added, removed) counts.
+        """
+        term_set = set(terms)
+        with sqlite3.connect(self.db_path) as conn:
+            existing = set(r[0] for r in conn.execute("SELECT term FROM embeddings").fetchall())
+
+        to_remove = existing - term_set
+        if to_remove:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.executemany("DELETE FROM embeddings WHERE term = ?", [(t,) for t in to_remove])
+
+        to_add = [t for t in terms if t not in existing]
+        if to_add:
+            self.build(to_add, batch_size=batch_size, progress=progress, workers=workers)
+
+        return len(to_add), len(to_remove)
+
     def search(self, queries: list) -> list:
         query_vecs = self._encode(queries)
         with sqlite3.connect(self.db_path) as conn:
