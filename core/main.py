@@ -21,7 +21,9 @@ from core.prompt_base import build_system_prompt, build_user_prompt, build_trans
 from core.llm_extractor import LLMExtractor
 from core.llm_translator import TermTranslator
 from core.logger import setup_logging
-from core.checkpoint import load as ckpt_load, save as ckpt_save, save_meta as ckpt_save_meta
+from core.checkpoint import (load as ckpt_load, save as ckpt_save,
+                             save_meta as ckpt_save_meta, load_meta as ckpt_load_meta,
+                             save_inputs as ckpt_save_inputs)
 from core.embed_store import EmbedStore
 import logging
 logger = logging.getLogger("pipeline")
@@ -157,6 +159,7 @@ async def _ner_flash_batch(batch_c, api_key, base_url):
                     if attempt < 7:
                         await asyncio.sleep(delay + random.uniform(0, delay * 0.5))
                         delay = min(delay * 2, 30)
+            logger.warning(f"NER failed for chunk {idx} after 7 attempts, skipping")
             results[idx] = ([], [])
 
     tasks = [_one(i, c) for i, c in enumerate(batch_c) if c.strip()]
@@ -402,11 +405,13 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
         output_dir = "output"
     setup_logging(log_dir=output_dir)
     if checkpoint_dir:
+        existing_meta = ckpt_load_meta(checkpoint_dir)
         ckpt_save_meta(checkpoint_dir, {
             "src_col": src_col, "gl_cn_col": gl_cn_col, "gl_en_col": gl_en_col,
-            "src_filename": Path(source_path).name,
-            "gl_filename": Path(glossary_path).name,
+            "src_filename": existing_meta.get("src_filename") or Path(source_path).name,
+            "gl_filename": existing_meta.get("gl_filename") or Path(glossary_path).name,
         })
+        source_path, glossary_path = ckpt_save_inputs(checkpoint_dir, source_path, glossary_path)
     profile = load_config(profile_name)
     glossary, glossary_keys = load_glossary(glossary_path, cn_col=gl_cn_col, en_col=gl_en_col)
     for gk in glossary_keys:
@@ -460,15 +465,18 @@ if __name__ == "__main__":
     parser.add_argument("--base-url", default="https://api.vectorengine.ai/v1")
     parser.add_argument("--model", default="gemini-3.1-pro-preview")
     parser.add_argument("--output", default="")
+    parser.add_argument("--checkpoint", default="",
+                        help="Checkpoint dir for resumable runs (auto-generated if not set)")
     args = parser.parse_args()
 
     t0 = time.time()
     out_dir = args.output or f"output/run_{time.strftime('%Y%m%d_%H%M')}"
     raw_dir = f"{out_dir}/raw_data"
+    ckpt_dir = args.checkpoint or f"output/_checkpoints/cli_{Path(args.source).stem}_{args.profile}"
 
     results = run_pipeline(args.source, args.glossary, args.profile,
                            args.api_key, args.base_url, args.model,
-                           raw_dir=raw_dir)
+                           raw_dir=raw_dir, checkpoint_dir=ckpt_dir)
 
     os.makedirs(out_dir, exist_ok=True)
     pd.DataFrame(results).to_excel(f"{out_dir}/results.xlsx", index=False)

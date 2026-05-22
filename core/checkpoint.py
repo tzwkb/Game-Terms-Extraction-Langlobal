@@ -46,3 +46,22 @@ def load_meta(checkpoint_dir: str) -> dict:
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def save_inputs(checkpoint_dir: str, source_path: str, glossary_path: str) -> tuple:
+    """Copy source and glossary into the checkpoint dir for resumption.
+
+    Source is copied only on first run (preserves original texts for context
+    matching). Glossary is always updated to reflect the latest version.
+    Returns (src_path, gl_path) pointing to the checkpoint copies.
+    """
+    d = Path(checkpoint_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    src_dst = d / "source.xlsx"
+    gl_dst = d / "glossary.xlsx"
+    if not src_dst.exists():
+        shutil.copy2(source_path, src_dst)
+    if src_dst.resolve() != Path(glossary_path).resolve():
+        if gl_dst.resolve() != Path(glossary_path).resolve():
+            shutil.copy2(glossary_path, gl_dst)
+    return str(src_dst), str(gl_dst) if gl_dst.exists() else glossary_path

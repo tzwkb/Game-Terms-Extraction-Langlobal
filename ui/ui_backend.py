@@ -473,29 +473,13 @@ class ProcessingTask:
 
             ckpt_root = ROOT / "output" / "_checkpoints"
             ckpt_root.mkdir(parents=True, exist_ok=True)
-            import hashlib
             h = hashlib.md5(src_bytes).hexdigest()[:8]
             existing = [d for d in ckpt_root.iterdir() if d.is_dir() and h in d.name and cfg.profile in d.name]
-            if existing:
-                ckpt_dir = str(existing[0])
-            else:
-                ckpt_dir = str(ckpt_root / checkpoint_id(src_bytes, cfg.profile))
-            # Always save source/glossary alongside checkpoint
-            import shutil
+            ckpt_dir = str(existing[0]) if existing else str(ckpt_root / checkpoint_id(src_bytes, cfg.profile))
             Path(ckpt_dir).mkdir(parents=True, exist_ok=True)
-            src_dst = str(Path(ckpt_dir) / "source.xlsx")
-            gl_dst = str(Path(ckpt_dir) / "glossary.xlsx")
-            if os.path.abspath(source_path) != os.path.abspath(src_dst):
-                shutil.copy2(source_path, src_dst)
-            if os.path.abspath(glossary_path) != os.path.abspath(gl_dst):
-                shutil.copy2(glossary_path, gl_dst)
-
-            # If source.xlsx already existed (old checkpoint), use it instead
-            # so _batch_match_context matches the original texts
-            actual_source = src_dst if Path(src_dst).exists() else source_path
 
             results = run_pipeline(
-                actual_source, glossary_path, cfg.profile,
+                source_path, glossary_path, cfg.profile,
                 cfg.api_key, cfg.api_base, cfg.model,
                 progress_callback=self._progress,
                 checkpoint_dir=ckpt_dir,

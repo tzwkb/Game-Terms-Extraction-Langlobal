@@ -16,6 +16,8 @@ class EmbedStore:
         self.base_url = base_url
         self.model = model
         self._dim = None
+        self._cache_terms = None
+        self._cache_matrix = None
         self._init_db()
 
     def _client(self) -> OpenAI:
@@ -28,6 +30,8 @@ class EmbedStore:
             row = conn.execute("SELECT value FROM meta WHERE key='model'").fetchone()
             if row and row[0] != self.model:
                 conn.execute("DELETE FROM embeddings")
+                self._cache_terms = None
+                self._cache_matrix = None
             conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('model', ?)", (self.model,))
             row = conn.execute("SELECT dim FROM embeddings LIMIT 1").fetchone()
             if row:
@@ -103,17 +107,24 @@ class EmbedStore:
         if to_add:
             self.build(to_add, batch_size=batch_size, progress=progress, workers=workers)
 
+        if to_remove or to_add:
+            self._cache_terms = None
+            self._cache_matrix = None
+
         return len(to_add), len(to_remove)
 
     def search(self, queries: list) -> list:
         query_vecs = self._encode(queries)
-        with sqlite3.connect(self.db_path) as conn:
-            rows = conn.execute("SELECT term, emb FROM embeddings").fetchall()
-        terms = [r[0] for r in rows]
-        emb_matrix = np.vstack([np.frombuffer(r[1], dtype=np.float32).reshape(1, -1) for r in rows])
-        sim = query_vecs @ emb_matrix.T
+        if self._cache_terms is None:
+            with sqlite3.connect(self.db_path) as conn:
+                rows = conn.execute("SELECT term, emb FROM embeddings").fetchall()
+            self._cache_terms = [r[0] for r in rows]
+            self._cache_matrix = np.vstack(
+                [np.frombuffer(r[1], dtype=np.float32).reshape(1, -1) for r in rows]
+            )
+        sim = query_vecs @ self._cache_matrix.T
         results = []
         for i in range(len(queries)):
             best = int(np.argmax(sim[i]))
-            results.append((terms[best], round(float(sim[i][best]), 3)))
+            results.append((self._cache_terms[best], round(float(sim[i][best]), 3)))
         return results
