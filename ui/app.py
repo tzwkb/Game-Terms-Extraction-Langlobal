@@ -312,9 +312,19 @@ elif page_id == "process":
                 try:
                     data = _json.loads(ckpt_file.read_text(encoding="utf-8"))
                     if data.get("chunk_idx", 0) > 0:
-                        all_ckpts.append({"name": d.name, "chunk_idx": data["chunk_idx"],
-                                          "total": data.get("total_chunks", 0),
-                                          "terms": len(data.get("terms", []))})
+                        meta_file = d / "run_meta.json"
+                        meta = _json.loads(meta_file.read_text(encoding="utf-8")) if meta_file.exists() else {}
+                        all_ckpts.append({
+                            "name": d.name,
+                            "chunk_idx": data["chunk_idx"],
+                            "total": data.get("total_chunks", 0),
+                            "terms": len(data.get("terms", [])),
+                            "src_col": meta.get("src_col", 0),
+                            "gl_cn_col": meta.get("gl_cn_col", 0),
+                            "gl_en_col": meta.get("gl_en_col", 1),
+                            "src_filename": meta.get("src_filename", ""),
+                            "gl_filename": meta.get("gl_filename", ""),
+                        })
                 except Exception:
                     pass
 
@@ -346,15 +356,16 @@ elif page_id == "process":
                 has_files = src_path.exists() and gl_path.exists()
                 col_c1, col_c2, col_c3 = st.columns([3, 1, 1])
                 with col_c1:
-                    extra = "" if has_files else " (需上传文件)"
-                    st.caption(f"{c['name']}: {c['chunk_idx']}/{c['total']} chunks, {c['terms']} terms{extra}")
+                    extra = "" if has_files else " (需上传文件才能继续)"
+                    fn_info = f"  `{c['src_filename']}`" if c.get("src_filename") else ""
+                    st.caption(f"{c['chunk_idx']}/{c['total']} chunks · {c['terms']} 条术语{fn_info}{extra}")
                 with col_c2:
                     if st.button("继续", key=f"resume_{c['name']}", disabled=not has_files, use_container_width=True):
                         task = ProcessingTask()
                         task.start(str(src_path), str(gl_path), cfg,
-                                   src_col=st.session_state.get("_src_col", 0),
-                                   gl_cn_col=st.session_state.get("_gl_cn_col", 0),
-                                   gl_en_col=st.session_state.get("_gl_en_col", 1),
+                                   src_col=c.get("src_col", 0),
+                                   gl_cn_col=c.get("gl_cn_col", 0),
+                                   gl_en_col=c.get("gl_en_col", 1),
                                    src_bytes=src_path.read_bytes())
                         st.session_state.task = task
                         st.session_state.task_results = None
