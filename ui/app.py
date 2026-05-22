@@ -227,7 +227,10 @@ if page_id == "settings":
 
     st.divider()
     st.caption("设置已自动保存，刷新浏览器后自动恢复。")
-    save_persisted_config(cfg)
+    cfg_sig = (cfg.api_key, cfg.model, cfg.profile, cfg.api_base)
+    if st.session_state.get("_saved_cfg") != cfg_sig:
+        save_persisted_config(cfg)
+        st.session_state._saved_cfg = cfg_sig
 
 # ═══════════════════════════════════════════════════════════
 # Page: Process

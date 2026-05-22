@@ -61,7 +61,6 @@ def save_inputs(checkpoint_dir: str, source_path: str, glossary_path: str) -> tu
     gl_dst = d / "glossary.xlsx"
     if not src_dst.exists():
         shutil.copy2(source_path, src_dst)
-    if src_dst.resolve() != Path(glossary_path).resolve():
-        if gl_dst.resolve() != Path(glossary_path).resolve():
-            shutil.copy2(glossary_path, gl_dst)
-    return str(src_dst), str(gl_dst) if gl_dst.exists() else glossary_path
+    if gl_dst.resolve() != Path(glossary_path).resolve():
+        shutil.copy2(glossary_path, gl_dst)
+    return str(src_dst), str(gl_dst)

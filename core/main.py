@@ -56,7 +56,7 @@ def load_glossary(path: str, cn_col: int = 0, en_col: int = 1) -> Tuple[dict, se
     for _, row in df.iterrows():
         cn = str(row.iloc[cn_col]).strip()
         en = str(row.iloc[en_col]).strip()
-        if cn and cn != "nan":
+        if cn and cn != "nan" and en and en != "nan":
             glossary[cn.lower()] = (cn, en)
             keys.add(cn)
     return glossary, keys
@@ -210,7 +210,7 @@ def _in_glossary(term: str, glossary_keys: set) -> bool:
     return bool(glossary_keys and term in glossary_keys)
 
 
-def filter_derived_terms(terms: List[dict], address_suffixes: list, glossary_keys: set = None) -> List[dict]:
+def _filter_derived_terms(terms: List[dict], address_suffixes: list, glossary_keys: set = None) -> List[dict]:
     """Remove NPC 称谓派生变体 (e.g. 冯大哥→冯) keeping the canonical form.
     Terms in glossary_keys are never filtered.
     """
@@ -324,9 +324,9 @@ def extract_terms(texts: List[str], profile: dict, api_key: str, base_url: str, 
 
     address_suffixes = profile.get("address_suffixes", [])
     before = len(terms)
-    terms = filter_derived_terms(terms, address_suffixes, glossary_keys)
+    terms = _filter_derived_terms(terms, address_suffixes, glossary_keys)
     if before != len(terms):
-        logger.info(f"filter_derived_terms removed {before - len(terms)} NPC nickname variants ({before} → {len(terms)})")
+        logger.info(f"_filter_derived_terms removed {before - len(terms)} NPC nickname variants ({before} → {len(terms)})")
 
     _batch_match_context(terms, texts)
 

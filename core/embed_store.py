@@ -67,19 +67,17 @@ class EmbedStore:
         if not new_terms:
             return
 
-        batches = []
-        for i in range(0, len(new_terms), batch_size):
-            batches.append((i, new_terms[i:i + batch_size]))
+        batches = {i: new_terms[i:i + batch_size] for i in range(0, len(new_terms), batch_size)}
         total = len(new_terms)
 
         db_lock = threading.Lock()
         done_count = [0]
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(self._encode_batch, batch, idx): idx for idx, batch in batches}
+            futures = {pool.submit(self._encode_batch, batch, idx): idx for idx, batch in batches.items()}
             for fut in as_completed(futures):
                 idx, vec = fut.result()
-                batch = batches[[b[0] for b in batches].index(idx)][1]
+                batch = batches[idx]
                 rows = [(t, v.tobytes(), vec.shape[1]) for t, v in zip(batch, vec)]
                 with db_lock:
                     with sqlite3.connect(self.db_path) as conn:
