@@ -2,14 +2,6 @@ import json, hashlib, shutil, time, tempfile, os
 from pathlib import Path
 
 
-def task_id(source_path: str, profile: str) -> str:
-    h = hashlib.md5()
-    with open(source_path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return f"{Path(source_path).stem}_{profile}_{h.hexdigest()[:8]}"
-
-
 def load(checkpoint_dir: str) -> dict:
     ckpt_file = Path(checkpoint_dir) / "checkpoint.json"
     if not ckpt_file.exists():
@@ -37,3 +29,38 @@ def clear(checkpoint_dir: str):
     p = Path(checkpoint_dir)
     if p.exists():
         shutil.rmtree(p)
+
+
+def save_meta(checkpoint_dir: str, data: dict):
+    Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
+    (Path(checkpoint_dir) / "run_meta.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def load_meta(checkpoint_dir: str) -> dict:
+    p = Path(checkpoint_dir) / "run_meta.json"
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_inputs(checkpoint_dir: str, source_path: str, glossary_path: str) -> tuple:
+    """Copy source and glossary into the checkpoint dir for resumption.
+
+    Source is copied only on first run (preserves original texts for context
+    matching). Glossary is always updated to reflect the latest version.
+    Returns (src_path, gl_path) pointing to the checkpoint copies.
+    """
+    d = Path(checkpoint_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    src_dst = d / "source.xlsx"
+    gl_dst = d / "glossary.xlsx"
+    if not src_dst.exists():
+        shutil.copy2(source_path, src_dst)
+    if gl_dst.resolve() != Path(glossary_path).resolve():
+        shutil.copy2(glossary_path, gl_dst)
+    return str(src_dst), str(gl_dst)

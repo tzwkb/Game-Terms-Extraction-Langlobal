@@ -16,6 +16,8 @@ class EmbedStore:
         self.base_url = base_url
         self.model = model
         self._dim = None
+        self._cache_terms = None
+        self._cache_matrix = None
         self._init_db()
 
     def _client(self) -> OpenAI:
@@ -28,6 +30,8 @@ class EmbedStore:
             row = conn.execute("SELECT value FROM meta WHERE key='model'").fetchone()
             if row and row[0] != self.model:
                 conn.execute("DELETE FROM embeddings")
+                self._cache_terms = None
+                self._cache_matrix = None
             conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('model', ?)", (self.model,))
             row = conn.execute("SELECT dim FROM embeddings LIMIT 1").fetchone()
             if row:
@@ -63,20 +67,17 @@ class EmbedStore:
         if not new_terms:
             return
 
-        batches = []
-        for i in range(0, len(new_terms), batch_size):
-            batches.append((i, new_terms[i:i + batch_size]))
+        batches = {i: new_terms[i:i + batch_size] for i in range(0, len(new_terms), batch_size)}
         total = len(new_terms)
 
-        results = {}
         db_lock = threading.Lock()
         done_count = [0]
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(self._encode_batch, batch, idx): idx for idx, batch in batches}
+            futures = {pool.submit(self._encode_batch, batch, idx): idx for idx, batch in batches.items()}
             for fut in as_completed(futures):
                 idx, vec = fut.result()
-                batch = batches[[b[0] for b in batches].index(idx)][1]
+                batch = batches[idx]
                 rows = [(t, v.tobytes(), vec.shape[1]) for t, v in zip(batch, vec)]
                 with db_lock:
                     with sqlite3.connect(self.db_path) as conn:
@@ -86,15 +87,42 @@ class EmbedStore:
                     progress("loading", min(done_count[0], total), total,
                              f"术语向量库: {min(done_count[0], total)}/{total}")
 
+    def sync(self, terms: list, batch_size: int = 256, progress: callable = None, workers: int = 8) -> tuple:
+        """Sync DB to exactly match `terms`: add new entries, remove stale ones.
+
+        Returns (added, removed) counts.
+        """
+        term_set = set(terms)
+        with sqlite3.connect(self.db_path) as conn:
+            existing = set(r[0] for r in conn.execute("SELECT term FROM embeddings").fetchall())
+
+        to_remove = existing - term_set
+        if to_remove:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.executemany("DELETE FROM embeddings WHERE term = ?", [(t,) for t in to_remove])
+
+        to_add = [t for t in terms if t not in existing]
+        if to_add:
+            self.build(to_add, batch_size=batch_size, progress=progress, workers=workers)
+
+        if to_remove or to_add:
+            self._cache_terms = None
+            self._cache_matrix = None
+
+        return len(to_add), len(to_remove)
+
     def search(self, queries: list) -> list:
         query_vecs = self._encode(queries)
-        with sqlite3.connect(self.db_path) as conn:
-            rows = conn.execute("SELECT term, emb FROM embeddings").fetchall()
-        terms = [r[0] for r in rows]
-        emb_matrix = np.vstack([np.frombuffer(r[1], dtype=np.float32).reshape(1, -1) for r in rows])
-        sim = query_vecs @ emb_matrix.T
+        if self._cache_terms is None:
+            with sqlite3.connect(self.db_path) as conn:
+                rows = conn.execute("SELECT term, emb FROM embeddings").fetchall()
+            self._cache_terms = [r[0] for r in rows]
+            self._cache_matrix = np.vstack(
+                [np.frombuffer(r[1], dtype=np.float32).reshape(1, -1) for r in rows]
+            )
+        sim = query_vecs @ self._cache_matrix.T
         results = []
         for i in range(len(queries)):
             best = int(np.argmax(sim[i]))
-            results.append((terms[best], round(float(sim[i][best]), 3)))
+            results.append((self._cache_terms[best], round(float(sim[i][best]), 3)))
         return results

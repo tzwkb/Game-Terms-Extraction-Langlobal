@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import os
 import json
+import hashlib
+import shutil
+import sqlite3
 import threading
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Callable, Optional
+from typing import List, Callable
 import logging
+
+from core.checkpoint import load as ckpt_load, load_meta as load_ckpt_meta
 
 ROOT = Path(__file__).parent.parent
 
@@ -62,14 +67,10 @@ def _load_persisted_config(cfg: RunConfig):
 
 
 def checkpoint_id(file_bytes: bytes, profile: str) -> str:
-    import hashlib
-    h = hashlib.md5(file_bytes).hexdigest()[:8]
-    return f"src_{profile}_{h}"
+    return f"src_{profile}_{hashlib.md5(file_bytes).hexdigest()[:8]}"
 
 
 def check_checkpoint(file_bytes: bytes, profile: str) -> dict:
-    from core.checkpoint import load as ckpt_load
-    import hashlib, json as _json
     h = hashlib.md5(file_bytes).hexdigest()[:8]
     ckpt_root = ROOT / "output" / "_checkpoints"
     if not ckpt_root.exists():
@@ -85,8 +86,6 @@ def check_checkpoint(file_bytes: bytes, profile: str) -> dict:
 
 
 def clear_checkpoint(file_bytes: bytes, profile: str):
-    from core.checkpoint import clear as ckpt_clear
-    import hashlib, shutil
     h = hashlib.md5(file_bytes).hexdigest()[:8]
     ckpt_root = ROOT / "output" / "_checkpoints"
     if not ckpt_root.exists():
@@ -167,10 +166,6 @@ def remove_model(name: str):
         if name in custom:
             custom.remove(name)
     _save_model_data(data)
-
-
-def is_preset_model(name: str) -> bool:
-    return name in PRESET_MODELS
 
 
 PROFILE_SKELETON = """\
@@ -349,20 +344,6 @@ def get_profile_content(name: str) -> str:
     return ""
 
 
-def load_profile_dict(name: str) -> dict:
-    import yaml as _yaml
-    p = ROOT / "profiles" / f"{name}.yaml"
-    if p.exists():
-        return _yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    return {}
-
-
-def save_profile_dict(name: str, data: dict):
-    import yaml as _yaml
-    p = ROOT / "profiles" / f"{name}.yaml"
-    p.write_text(_yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
-
-
 # ═══════════════════════════════════════════════════════════
 # Profile management
 # ═══════════════════════════════════════════════════════════
@@ -394,6 +375,26 @@ def delete_profile(name: str):
 # API test
 # ═══════════════════════════════════════════════════════════
 
+def reset_embed_db() -> int:
+    """Delete the glossary embedding DB. Returns 1 if deleted, 0 if not found."""
+    db_path = ROOT / "database" / "glossary_embeddings.db"
+    if db_path.exists():
+        db_path.unlink()
+        return 1
+    return 0
+
+
+def embed_db_term_count() -> int:
+    db_path = ROOT / "database" / "glossary_embeddings.db"
+    if not db_path.exists():
+        return 0
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            return conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0]
+    except Exception:
+        return 0
+
+
 def test_api_connection(cfg: RunConfig) -> tuple:
     try:
         from openai import OpenAI
@@ -421,6 +422,7 @@ class ProcessingTask:
         self.results: list = []
         self.error: str | None = None
         self.info: str = ""
+        self.output_dir: str = ""
         self._stop = threading.Event()
         self._cancelling = False
         self._thread: threading.Thread | None = None
@@ -440,6 +442,7 @@ class ProcessingTask:
         self.error = None
         self.results = []
         self.info = ""
+        self.output_dir = ""
         self.stage = "starting"
         self.stage_done = 0
         self.stage_total = 1
@@ -462,43 +465,32 @@ class ProcessingTask:
     def _run(self, source_path: str, glossary_path: str, cfg: RunConfig, on_done,
              src_col: int = 0, gl_cn_col: int = 0, gl_en_col: int = 1, src_bytes: bytes = b""):
         try:
+            import time as _time
             from core.main import run_pipeline
             from core.checkpoint import clear as ckpt_clear
-            import config as pipe_cfg
 
-            pipe_cfg.EXTRACTOR_CONFIG["max_concurrent"] = cfg.max_concurrent
-            pipe_cfg.EXTRACTOR_CONFIG["max_tokens"] = cfg.max_tokens
+            ts = _time.strftime("%Y%m%d_%H%M%S")
+            out_dir = ROOT / "output" / f"run_{ts}"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            self.output_dir = str(out_dir)
 
             ckpt_root = ROOT / "output" / "_checkpoints"
             ckpt_root.mkdir(parents=True, exist_ok=True)
-            import hashlib
             h = hashlib.md5(src_bytes).hexdigest()[:8]
             existing = [d for d in ckpt_root.iterdir() if d.is_dir() and h in d.name and cfg.profile in d.name]
-            if existing:
-                ckpt_dir = str(existing[0])
-            else:
-                ckpt_dir = str(ckpt_root / checkpoint_id(src_bytes, cfg.profile))
-            # Always save source/glossary alongside checkpoint
-            import shutil
+            ckpt_dir = str(existing[0]) if existing else str(ckpt_root / checkpoint_id(src_bytes, cfg.profile))
             Path(ckpt_dir).mkdir(parents=True, exist_ok=True)
-            src_dst = str(Path(ckpt_dir) / "source.xlsx")
-            gl_dst = str(Path(ckpt_dir) / "glossary.xlsx")
-            if os.path.abspath(source_path) != os.path.abspath(src_dst):
-                shutil.copy2(source_path, src_dst)
-            if os.path.abspath(glossary_path) != os.path.abspath(gl_dst):
-                shutil.copy2(glossary_path, gl_dst)
-
-            # If source.xlsx already existed (old checkpoint), use it instead
-            # so _batch_match_context matches the original texts
-            actual_source = src_dst if Path(src_dst).exists() else source_path
 
             results = run_pipeline(
-                actual_source, glossary_path, cfg.profile,
+                source_path, glossary_path, cfg.profile,
                 cfg.api_key, cfg.api_base, cfg.model,
+                output_dir=str(out_dir),
                 progress_callback=self._progress,
                 checkpoint_dir=ckpt_dir,
                 src_col=src_col, gl_cn_col=gl_cn_col, gl_en_col=gl_en_col,
                 embed_workers=cfg.embed_workers,
+                max_concurrent=cfg.max_concurrent,
+                max_tokens=cfg.max_tokens,
             )
             ckpt_clear(ckpt_dir)
             self.results = results

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, time, signal, json, re
+import sys, os, time, signal, json, re, random
 import asyncio
 
 if sys.platform == "win32":
@@ -9,7 +9,7 @@ from typing import List, Dict, Tuple
 import pandas as pd
 import yaml
 import jieba
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 
 _interrupted = False
 
@@ -21,10 +21,14 @@ from core.prompt_base import build_system_prompt, build_user_prompt, build_trans
 from core.llm_extractor import LLMExtractor
 from core.llm_translator import TermTranslator
 from core.logger import setup_logging
-from core.checkpoint import load as ckpt_load, save as ckpt_save
+from core.checkpoint import (load as ckpt_load, save as ckpt_save,
+                             save_meta as ckpt_save_meta, load_meta as ckpt_load_meta,
+                             save_inputs as ckpt_save_inputs)
 from core.embed_store import EmbedStore
 import logging
 logger = logging.getLogger("pipeline")
+
+_VAR_RE = re.compile(r'\$\{[^}]*\}|\$[a-zA-Z_]\w*|\$\d+')
 
 
 def _on_interrupt(sig, frame):
@@ -52,17 +56,10 @@ def load_glossary(path: str, cn_col: int = 0, en_col: int = 1) -> Tuple[dict, se
     for _, row in df.iterrows():
         cn = str(row.iloc[cn_col]).strip()
         en = str(row.iloc[en_col]).strip()
-        if cn and cn != "nan":
+        if cn and cn != "nan" and en and en != "nan":
             glossary[cn.lower()] = (cn, en)
             keys.add(cn)
     return glossary, keys
-
-
-def match_context(term: str, source_texts: List[str]) -> str:
-    for text in source_texts:
-        if term in text:
-            return text.replace("\n", " ").strip()
-    return ""
 
 
 def _batch_match_context(terms: List[dict], source_texts: List[str]) -> None:
@@ -84,7 +81,7 @@ def _chunk_texts(texts: List[str], target_chars: int, overlap: int = 3) -> List[
     for t in texts:
         if cur_c + len(t) > target_chars and cur:
             chunks.append("\n\n".join(cur))
-            cur = cur[-overlap:] if len(cur) > overlap else cur[:]
+            cur = cur[-overlap:]
             cur_c = sum(len(s) for s in cur) + (len(cur) - 1) * 2
         cur.append(t)
         cur_c += len(t)
@@ -160,10 +157,9 @@ async def _ner_flash_batch(batch_c, api_key, base_url):
                     return
                 except Exception:
                     if attempt < 7:
-                        import random
-                        jitter = random.uniform(0, delay * 0.5)
-                        await asyncio.sleep(delay + jitter)
+                        await asyncio.sleep(delay + random.uniform(0, delay * 0.5))
                         delay = min(delay * 2, 30)
+            logger.warning(f"NER failed for chunk {idx} after 7 attempts, skipping")
             results[idx] = ([], [])
 
     tasks = [_one(i, c) for i, c in enumerate(batch_c) if c.strip()]
@@ -214,7 +210,7 @@ def _in_glossary(term: str, glossary_keys: set) -> bool:
     return bool(glossary_keys and term in glossary_keys)
 
 
-def filter_derived_terms(terms: List[dict], address_suffixes: list, glossary_keys: set = None) -> List[dict]:
+def _filter_derived_terms(terms: List[dict], address_suffixes: list, glossary_keys: set = None) -> List[dict]:
     """Remove NPC 称谓派生变体 (e.g. 冯大哥→冯) keeping the canonical form.
     Terms in glossary_keys are never filtered.
     """
@@ -230,13 +226,7 @@ def filter_derived_terms(terms: List[dict], address_suffixes: list, glossary_key
         for suffix in suffixes:
             if term.endswith(suffix) and len(term) > len(suffix):
                 stem = term[:-len(suffix)]
-                if stem in term_set:
-                    is_derivative = True
-                    break
-                if len(stem) >= 2 and any(o != term and o.startswith(stem) for o in term_set):
-                    is_derivative = True
-                    break
-                if len(stem) == 1 and any(o != term and o.startswith(stem) for o in term_set):
+                if stem in term_set or any(o != term and o.startswith(stem) for o in term_set):
                     is_derivative = True
                     break
         if not is_derivative:
@@ -316,7 +306,7 @@ def extract_terms(texts: List[str], profile: dict, api_key: str, base_url: str, 
         dt = time.time() - t_batch
         pct = end / len(chunks) * 100
         elapsed = time.time() - t0
-        etc = elapsed / (end) * (len(chunks) - end) if end else 0
+        etc = elapsed / end * (len(chunks) - end) if end else 0
         logger.info(f"[{end}/{len(chunks)}] {pct:.0f}% | +{len(batch_results)} terms, total:{len(results)} | {dt:.0f}s | elapsed:{elapsed/60:.1f}m, ETC:{etc/60:.0f}m")
         if progress_callback:
             progress_callback("extracting", end, len(chunks),
@@ -334,9 +324,9 @@ def extract_terms(texts: List[str], profile: dict, api_key: str, base_url: str, 
 
     address_suffixes = profile.get("address_suffixes", [])
     before = len(terms)
-    terms = filter_derived_terms(terms, address_suffixes, glossary_keys)
+    terms = _filter_derived_terms(terms, address_suffixes, glossary_keys)
     if before != len(terms):
-        logger.info(f"filter_derived_terms removed {before - len(terms)} NPC nickname variants ({before} → {len(terms)})")
+        logger.info(f"_filter_derived_terms removed {before - len(terms)} NPC nickname variants ({before} → {len(terms)})")
 
     _batch_match_context(terms, texts)
 
@@ -367,8 +357,8 @@ def match_and_translate(extracted: List[dict], glossary: dict, profile: dict,
     refs = embed_store.search(query_terms) if embed_store else []
 
     for i, t in enumerate(need_translate):
-        cn_ref, sim = refs[i]
-        en_ref = glossary[cn_ref][1]
+        cn_ref, sim = refs[i] if i < len(refs) else ("", 0.0)
+        en_ref = glossary[cn_ref][1] if cn_ref and cn_ref in glossary else ""
         t["_ref_term"] = cn_ref
         t["_ref_trans"] = en_ref
         t["_ref_sim"] = sim
@@ -405,11 +395,20 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
                  output_dir: str = "", raw_dir: str = "", checkpoint_dir: str = "",
                  progress_callback: callable = None,
                  src_col: int = 0, gl_cn_col: int = 0, gl_en_col: int = 1,
-                 embed_workers: int = 16) -> List[dict]:
+                 embed_workers: int = 16,
+                 max_concurrent: int = None, max_tokens: int = None) -> List[dict]:
 
     if not output_dir:
         output_dir = "output"
     setup_logging(log_dir=output_dir)
+    if checkpoint_dir:
+        existing_meta = ckpt_load_meta(checkpoint_dir)
+        ckpt_save_meta(checkpoint_dir, {
+            "src_col": src_col, "gl_cn_col": gl_cn_col, "gl_en_col": gl_en_col,
+            "src_filename": existing_meta.get("src_filename") or Path(source_path).name,
+            "gl_filename": existing_meta.get("gl_filename") or Path(glossary_path).name,
+        })
+        source_path, glossary_path = ckpt_save_inputs(checkpoint_dir, source_path, glossary_path)
     profile = load_config(profile_name)
     glossary, glossary_keys = load_glossary(glossary_path, cn_col=gl_cn_col, en_col=gl_en_col)
     for gk in glossary_keys:
@@ -418,27 +417,23 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
     db_path = ROOT / "database" / "glossary_embeddings.db"
     db_path.parent.mkdir(exist_ok=True)
     embed_store = EmbedStore(str(db_path), api_key, base_url)
-    if not embed_store.is_built:
-        if progress_callback:
-            progress_callback("loading", 0, 1, f"正在构建术语向量库 ({len(glossary_keys)} 条)…")
-        logger.info(f"Building embedding store for {len(glossary_keys)} glossary terms...")
-        embed_store.build(list(glossary_keys), progress=progress_callback, workers=embed_workers)
-        logger.info(f"Embedding store built: {embed_store.count} terms")
+    if progress_callback:
+        progress_callback("loading", 0, 1, f"同步术语向量库 ({len(glossary_keys)} 条)…")
+    added, removed = embed_store.sync(list(glossary_keys), progress=progress_callback, workers=embed_workers)
+    logger.info(f"Embedding store synced: +{added} added, -{removed} removed, {embed_store.count} total")
 
     df_src = pd.read_excel(source_path)
     texts = df_src.iloc[:, src_col].dropna().astype(str).str.strip().tolist()
     texts = [t for t in texts if t]
     texts = list(dict.fromkeys(texts))
-    _var_re = re.compile(r'\$\{[^}]*\}|\$[a-zA-Z_]\w*|\$\d+')
-    texts = [_var_re.sub('', t).strip() for t in texts]
+    texts = [_VAR_RE.sub('', t).strip() for t in texts]
     texts = [t for t in texts if t]
     logger.info(f"Source: {len(df_src)} rows -> {len(texts)} after dedup")
     if progress_callback:
         progress_callback("loading", 1, 1, f"{len(texts)} texts loaded, {len(glossary_keys)} glossary terms")
-    if progress_callback:
         progress_callback("extracting", 0, 1, "即将开始提取…")
     logger.info("Extracting terms...")
-    extracted = extract_terms(texts, profile, api_key, base_url, model, output_dir=output_dir, raw_dir=raw_dir, checkpoint_dir=checkpoint_dir, glossary_keys=glossary_keys, progress_callback=progress_callback)
+    extracted = extract_terms(texts, profile, api_key, base_url, model, output_dir=output_dir, raw_dir=raw_dir, checkpoint_dir=checkpoint_dir, glossary_keys=glossary_keys, progress_callback=progress_callback, concurrent=max_concurrent, max_tokens=max_tokens)
 
     filterable = set(profile.get("filterable_categories", []))
     if filterable:
@@ -467,15 +462,18 @@ if __name__ == "__main__":
     parser.add_argument("--base-url", default="https://api.vectorengine.ai/v1")
     parser.add_argument("--model", default="gemini-3.1-pro-preview")
     parser.add_argument("--output", default="")
+    parser.add_argument("--checkpoint", default="",
+                        help="Checkpoint dir for resumable runs (auto-generated if not set)")
     args = parser.parse_args()
 
     t0 = time.time()
     out_dir = args.output or f"output/run_{time.strftime('%Y%m%d_%H%M')}"
     raw_dir = f"{out_dir}/raw_data"
+    ckpt_dir = args.checkpoint or f"output/_checkpoints/cli_{Path(args.source).stem}_{args.profile}"
 
     results = run_pipeline(args.source, args.glossary, args.profile,
                            args.api_key, args.base_url, args.model,
-                           raw_dir=raw_dir)
+                           raw_dir=raw_dir, checkpoint_dir=ckpt_dir)
 
     os.makedirs(out_dir, exist_ok=True)
     pd.DataFrame(results).to_excel(f"{out_dir}/results.xlsx", index=False)
