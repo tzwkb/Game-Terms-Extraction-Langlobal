@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>游戏术语抽取 · 项目 Profile 撰写指南（PM 版）</title>
+<style>
+  :root{
+    --brand:#1F4E79; --accent:#2E75B6; --ink:#1f2933; --muted:#5b6b7b;
+    --line:#e3e8ee; --bg:#f6f8fb; --card:#ffffff; --star:#b07d12;
+    --ok:#1f7a4d; --okbg:#e9f7ef; --warn:#9a4a00; --warnbg:#fff3e6;
+    --bad:#a32525; --badbg:#fdecec; --info:#1b5e9a; --infobg:#eaf3fb;
+    --code:#0f2438; --codebg:#f3f5f8;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px; line-height:1.75; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{display:flex; max-width:1180px; margin:0 auto; gap:32px; padding:0 24px}
+  /* ── Sidebar ── */
+  nav.toc{
+    position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+    width:236px; flex:0 0 236px; padding:28px 10px 40px 0; border-right:1px solid var(--line);
+  }
+  nav.toc .brandmark{font-size:12px; letter-spacing:.12em; color:var(--accent); font-weight:700; margin-bottom:14px}
+  nav.toc a{
+    display:block; padding:6px 12px; color:var(--muted); text-decoration:none;
+    font-size:13.5px; border-radius:7px; border-left:2px solid transparent; transition:.15s;
+  }
+  nav.toc a:hover{background:#eef3f9; color:var(--brand)}
+  nav.toc a.sub{padding-left:24px; font-size:12.5px}
+  nav.toc a.h{margin-top:10px; font-weight:700; color:var(--brand)}
+  /* ── Main ── */
+  main{flex:1 1 auto; min-width:0; padding:0 0 80px}
+  header.hero{
+    margin:34px 0 30px; padding:30px 34px; border-radius:16px; color:#fff;
+    background:linear-gradient(135deg,var(--brand),var(--accent));
+    box-shadow:0 10px 30px rgba(31,78,121,.18);
+  }
+  header.hero h1{margin:0 0 8px; font-size:25px; letter-spacing:.01em}
+  header.hero p{margin:0; opacity:.92; font-size:14.5px}
+  header.hero .tags{margin-top:16px; display:flex; gap:8px; flex-wrap:wrap}
+  header.hero .tags span{background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); padding:3px 11px; border-radius:999px; font-size:12px}
+
+  section{margin:0 0 14px; scroll-margin-top:18px}
+  h2{
+    font-size:19px; margin:38px 0 14px; padding-bottom:8px; border-bottom:2px solid var(--line);
+    display:flex; align-items:center; gap:11px; color:var(--brand);
+  }
+  h2 .n{
+    flex:0 0 28px; height:28px; border-radius:8px; background:var(--brand); color:#fff;
+    font-size:14px; display:inline-flex; align-items:center; justify-content:center; font-weight:700;
+  }
+  h3{font-size:15.5px; margin:22px 0 8px; color:var(--ink)}
+  p{margin:10px 0}
+  a{color:var(--accent)}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:5px 0}
+  strong{color:var(--ink)}
+  .lead{font-size:15.5px; color:var(--muted)}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:13px; padding:18px 20px; margin:14px 0; box-shadow:0 1px 2px rgba(16,42,67,.04)}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+
+  /* callouts */
+  .callout{border-radius:11px; padding:13px 16px 13px 16px; margin:14px 0; border:1px solid; font-size:14px}
+  .callout .t{font-weight:700; margin-bottom:3px; display:flex; align-items:center; gap:7px}
+  .callout p{margin:4px 0}
+  .c-info{background:var(--infobg); border-color:#cfe3f5; color:#143a5c}
+  .c-tip{background:var(--okbg); border-color:#c5e8d4; color:#13502f}
+  .c-warn{background:var(--warnbg); border-color:#f3d8b3; color:#7a3a00}
+  .c-bad{background:var(--badbg); border-color:#f3c9c9; color:#7e1d1d}
+  .c-star{background:#fbf3df; border-color:#ecd9a6; color:#7a560c}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px; background:#fff; border-radius:10px; overflow:hidden; border:1px solid var(--line)}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{background:#eef3f9; color:var(--brand); font-weight:700; font-size:13px}
+  tr:last-child td{border-bottom:none}
+  td code, p code, li code{background:var(--codebg); color:var(--code); padding:1px 6px; border-radius:5px; font-size:12.5px; font-family:"SF Mono",Menlo,Consolas,monospace}
+  .imp{color:var(--star); font-weight:700}
+
+  /* steps */
+  .steps{counter-reset:s; margin:16px 0}
+  .step{position:relative; padding:14px 18px 14px 58px; background:#fff; border:1px solid var(--line); border-radius:12px; margin:10px 0}
+  .step::before{
+    counter-increment:s; content:counter(s); position:absolute; left:14px; top:14px;
+    width:30px; height:30px; border-radius:50%; background:var(--brand); color:#fff;
+    font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px;
+  }
+  .step h4{margin:0 0 4px; font-size:14.5px}
+  .step p{margin:3px 0; font-size:13.5px; color:var(--muted)}
+
+  pre{background:var(--code); color:#e7eef6; padding:15px 17px; border-radius:11px; overflow-x:auto; font-size:12.5px; line-height:1.65; margin:12px 0}
+  pre code{font-family:"SF Mono",Menlo,Consolas,monospace}
+  .cm{color:#7fa6c9} .ky{color:#9cdcfe} .st{color:#c5e1a5}
+
+  .good{color:var(--ok); font-weight:700}
+  .badx{color:var(--bad); font-weight:700}
+  .vs{display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid var(--line); border-radius:10px; overflow:hidden; margin:12px 0}
+  .vs>div{padding:12px 15px; font-size:13.5px}
+  .vs .g{background:var(--okbg)} .vs .b{background:var(--badbg)}
+  @media(max-width:760px){.vs{grid-template-columns:1fr}}
+
+  .pipe{font-family:"SF Mono",Menlo,Consolas,monospace; font-size:12.5px; line-height:1.9; color:#143a5c; background:#eef3f9; border:1px solid #d6e3f0; border-radius:11px; padding:16px 18px; overflow-x:auto; white-space:pre}
+
+  footer{margin-top:50px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px}
+
+  @media(max-width:980px){
+    nav.toc{display:none}
+    .wrap{padding:0 16px}
+  }
+  @media print{
+    nav.toc{display:none}
+    body{background:#fff; font-size:12px}
+    .wrap{max-width:none}
+    header.hero{box-shadow:none; color:#000; background:#fff; border:2px solid var(--brand)}
+    header.hero h1,header.hero p{color:var(--brand)}
+    .card,.step,table,.callout,.pipe,pre{break-inside:avoid}
+    h2{break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <div class="brandmark">GAME TERMS · PROFILE GUIDE</div>
+  <a class="h" href="#tldr">速览：一图看懂</a>
+  <a href="#what">① Profile 是什么</a>
+  <a href="#prepare">② 准备哪些资料</a>
+  <a class="sub" href="#prepare">·源文件</a>
+  <a class="sub" href="#prepare">·术语表 ★</a>
+  <a class="sub" href="#prepare">·填表素材</a>
+  <a href="#flow">③ 操作流程</a>
+  <a href="#form">④ 填写表逐项详解</a>
+  <a href="#why">⑤ 为什么这样能提准</a>
+  <a href="#tune">⑥ 调优迭代环</a>
+  <a href="#pit">⑦ 常见坑 & FAQ</a>
+  <a href="#appendix">附：Profile 长什么样</a>
+</nav>
+
+<main>
+
+<header class="hero">
+  <h1>游戏术语抽取 · 项目 Profile 撰写指南</h1>
+  <p>面向项目经理 · 为全新项目准备资料、撰写配置、提高提取准确率</p>
+  <div class="tags">
+    <span>不用写代码</span><span>填一张表即可</span><span>准确率可迭代</span><span>v1 · 2026-06</span>
+  </div>
+</header>
+
+<p class="lead">每个新游戏项目，工具靠一份 <strong>Profile（项目配置）</strong> 决定"抓什么、不抓什么、怎么分类、怎么译"。本指南告诉你：开新项目时<strong>该准备哪些资料、怎么操作、如何把准确率调上去</strong>。你不需要懂 YAML——只需填一张表，剩下交给工程/AI 转换。</p>
+
+<!-- ════════ TL;DR ════════ -->
+<section id="tldr">
+<h2><span class="n">★</span>速览：一图看懂</h2>
+
+<div class="card">
+<div class="pipe">原文.xlsx  +  术语表.xlsx
+      │
+      ├─ 自动识别列（原文列 / 中英列）
+      ├─ 去重 → 切块（约1200字，行间重叠防断词）
+      │
+      ├─ 每批文本，三路"提示"喂给模型：
+      │     ① 术语表命中词   ② AI 扫人名/地名   ③ 百家姓规则兜底人名
+      │
+      ├─ <b>LLM 提取 ×3 轮投票</b>（温度 0 / 0.3 / 0.7）→ <b>3 票全中才保留</b>
+      │
+      ├─ 去重 → 去称谓重复（冯大哥→冯）→ 丢通用类
+      │
+      └─ 术语表精确命中→直接套译 ／ 没命中→向量找近义参考→AI 翻译
+                                    │
+                                    ▼
+                              results.xlsx（中英双语术语表）</div>
+</div>
+
+<div class="grid2">
+  <div class="callout c-star" style="margin:0">
+    <div class="t">★ 最关键的一件事</div>
+    <p><strong>术语表（已有中→英对照）越全，准确率越高。</strong>它同时承担三件事：召回兜底、精确套译、近义参考。实测中召回率约 <strong>91% 靠术语表</strong>撑起来——它比任何 prompt 都重要。能凑多全就凑多全。</p>
+  </div>
+  <div class="callout c-info" style="margin:0">
+    <div class="t">PM 实际要交付的</div>
+    <p>① 游戏文本文件（源文件）<br>② 尽量完整的术语表<br>③ 填好的《项目配置填写表.xlsx》<br>就这三样。工程把 ③ 转成 <code>profiles/&lt;游戏&gt;.yaml</code>，然后跑。</p>
+  </div>
+</div>
+</section>
+
+<!-- ════════ WHAT ════════ -->
+<section id="what">
+<h2><span class="n">1</span>Profile 是什么</h2>
+<p>Profile 是一个游戏对应的配置文件（<code>profiles/*.yaml</code>），它把你对这个项目的判断翻译成模型能执行的规则。它控制四件事：</p>
+<table>
+<tr><th>它管什么</th><th>对应你要回答的问题</th></tr>
+<tr><td>抓什么</td><td>这个游戏里哪些词算"术语"？人名、技能、地名、道具……</td></tr>
+<tr><td>不抓什么</td><td>哪些是噪音？日常物品、泛称、成语、时间词……</td></tr>
+<tr><td>怎么分类</td><td>抓到的术语归到哪些类别？（NPC名 / 武学招式 / 地名建筑……）</td></tr>
+<tr><td>怎么译</td><td>各类术语的翻译方向（人名音译、招式意译……）</td></tr>
+</table>
+<div class="callout c-tip">
+  <div class="t">✔ 你不用碰 YAML</div>
+  <p>你只填一张 Excel 表（<a href="#form">第 4 节</a>逐题讲）。工程或 AI 把表转成 YAML。本指南里出现的 YAML 只是给你"看一眼成品长啥样"，不要求你手写。</p>
+</div>
+</section>
+
+<!-- ════════ PREPARE ════════ -->
+<section id="prepare">
+<h2><span class="n">2</span>准备哪些资料</h2>
+<p>开新项目，按下面三类备齐。<strong>第二类（术语表）是准确率的命门，优先级最高。</strong></p>
+
+<h3>① 源文件 —— 要被提取的游戏文本</h3>
+<div class="card">
+<ul>
+  <li>格式：<code>.xlsx</code>，至少有一列是<strong>中文原文</strong>（要从里面抠术语的那一列）。</li>
+  <li>可以多个文件分批跑（剧情 / UI / 技能 拆开更好管理）。</li>
+  <li>列名带"原文 / 文本 / 内容 / 中文"之类，系统能<strong>自动认列</strong>；列名乱也行，跑前在界面手动确认即可。</li>
+  <li>变量占位符（<code>${name}</code>、<code>{0}</code>、<code>&lt;color=...&gt;</code>、<code>$N</code>）会被自动剥离，<strong>不用你手动清</strong>。</li>
+  <li><strong>双语模式（选用）</strong>：如果源文件已经有官方英文列，可同时给中英两列——命中的英文会被原文照抄，省一道翻译且更准。</li>
+</ul>
+</div>
+
+<h3>② 术语表 <span class="imp">★ 命门</span> —— 已有的中→英对照</h3>
+<div class="callout c-star">
+  <div class="t">★ 为什么它最重要</div>
+  <p>工具的本质是"<strong>术语表负责召回，AI 负责降噪</strong>"。术语表里有的词，会被<strong>保护不被误删</strong>、<strong>直接套用已有译文</strong>（实测约一半术语靠它直接译）、并作为新词翻译的<strong>近义参考</strong>。表越全，召回越高、译文越统一。表太薄，再好的 prompt 也救不回召回。</p>
+</div>
+<div class="card">
+<p><strong>格式：</strong><code>.xlsx</code>，两列——<strong>中文术语 | 英文翻译</strong>（列名带"中文/术语""英文/译文"可自动识别）。</p>
+<p><strong>去哪儿凑（能并就并）：</strong></p>
+<ul>
+  <li>官方术语库 / 风格指南附带的词表</li>
+  <li>同 IP、同世界观历史项目的 TM / 术语沉淀</li>
+  <li>策划案里的：人物表、技能表、道具表、地图/地名表、组织门派表</li>
+  <li>已定稿批次的术语（边做边回灌，下一批更准）</li>
+</ul>
+<div class="callout c-warn" style="margin-bottom:0">
+  <div class="t">⚠ 没有现成术语表怎么办</div>
+  <p>也能跑，但召回会偏低、译文不统一。建议至少手凑一份<strong>核心人物 + 核心系统词</strong>的小表先垫着，第一批跑完把确认无误的术语回灌进去，<strong>边跑边长</strong>。</p>
+</div>
+</div>
+
+<h3>③ 填表素材 —— 用来写 Profile 的背景资料</h3>
+<p>这些不直接喂工具，而是帮你<strong>把《配置填写表》填准</strong>。手边备好：</p>
+<table>
+<tr><th>填表需要</th><th>从哪份资料找</th></tr>
+<tr><td>游戏风格 / 世界观一句话</td><td>立项书、世界观设定文档</td></tr>
+<tr><td>要抓 / 不要抓哪些类型</td><td>客户 brief、翻译需求说明、试译反馈</td></tr>
+<tr><td>术语分类清单</td><td>游戏系统结构（战斗 / 养成 / 社交 / 商城…）</td></tr>
+<tr><td>容易搞混的边界情况</td><td>试译踩过的坑、同类项目经验</td></tr>
+<tr><td>正 / 反样例（贴原文标注）</td><td>真实游戏文本若干段</td></tr>
+<tr><td>翻译方向、目标语言</td><td>客户要求、本地化规范</td></tr>
+</table>
+</section>
+
+<!-- ════════ FLOW ════════ -->
+<section id="flow">
+<h2><span class="n">3</span>操作流程</h2>
+<div class="steps">
+  <div class="step">
+    <h4>收集资料</h4>
+    <p>源文件 + 术语表 + 填表素材（见第 2 节）。术语表尽量凑全。</p>
+  </div>
+  <div class="step">
+    <h4>填《项目配置填写表.xlsx》</h4>
+    <p>位于 <code>docs/项目配置填写表.xlsx</code>。只填黄色区，12 题，自然语言作答。逐题讲见<a href="#form">第 4 节</a>。</p>
+  </div>
+  <div class="step">
+    <h4>转成 Profile</h4>
+    <p>把填好的表发给工程 / AI，生成 <code>profiles/&lt;游戏&gt;.yaml</code>。你不用手写 YAML。</p>
+  </div>
+  <div class="step">
+    <h4>小样本试跑</h4>
+    <p>界面上传"源文件 + 术语表"，选你的 profile，<strong>先只跑 1 个文件 / 一小段</strong>看效果，别一上来全量。</p>
+  </div>
+  <div class="step">
+    <h4>审第一批输出</h4>
+    <p>对照结果标两类问题：<span class="badx">漏报</span>（该提没提）、<span class="badx">误报</span>（不该提提了）。再看分类对不对。</p>
+  </div>
+  <div class="step">
+    <h4>回填迭代</h4>
+    <p>按<a href="#tune">第 6 节</a>的对照表改 profile / 补术语表，重跑小样本，直到满意。</p>
+  </div>
+  <div class="step">
+    <h4>全量跑 + 交付</h4>
+    <p>满意后跑全量。中断了重传相同文件 + 选相同 profile，会<strong>自动断点续跑</strong>。输出 <code>results.xlsx</code> 双语术语表。</p>
+  </div>
+</div>
+<div class="callout c-info">
+  <div class="t">ℹ 关于"试跑要不要花钱 / 多久"</div>
+  <p>提取走 3 轮投票，量大时耗时与成本不低，所以<strong>务必先小样本验证 profile，再放全量</strong>。一次把 profile 调对，比全量跑三遍省得多。</p>
+</div>
+</section>
+
+<!-- ════════ FORM ════════ -->
+<section id="form">
+<h2><span class="n">4</span>填写表逐项详解</h2>
+<p>表分六部分共 12 题。下表把<strong>每一题 → 它进入 Profile 的哪个字段 → 怎么写得准</strong>串起来。<span class="imp">★</span> 标的是对准确率影响最大的题，请重点投入。</p>
+
+<table>
+<tr><th style="width:30px">#</th><th>题目</th><th>对应字段</th><th>写法要点</th></tr>
+<tr><td>1</td><td>游戏名称</td><td><code>game_type</code></td><td>完整中文名。</td></tr>
+<tr><td>2</td><td>游戏风格 / 世界观</td><td><code>game_type</code></td><td>一句话定调，如"古风武侠开放世界"。模型据此定身份。</td></tr>
+<tr><td>3</td><td>本次任务说明</td><td><code>task_description</code></td><td>一句话，记录用途。</td></tr>
+<tr><td><span class="imp">4★</span></td><td>必须提取的类型</td><td><code>core_principle</code> + <code>extract_examples.include</code></td><td>越详尽越好，逐类列。这是"抓什么"的总纲，直接进系统提示。</td></tr>
+<tr><td><span class="imp">5★</span></td><td>不要提取的内容</td><td><code>extract_examples.exclude</code></td><td>列出噪音类型（日常物品 / 泛称 / 成语 / 时间词）。降噪主力。</td></tr>
+<tr><td><span class="imp">6★</span></td><td>特别注意事项</td><td><code>extraction_notes</code></td><td>专写<strong>边界 / 易混</strong>规则，如"老X小X阿X一律人名""排行命名全提取"。</td></tr>
+<tr><td>7</td><td>术语分类列表</td><td><code>term_categories</code></td><td>每行一类。够用即可，别过细（太细模型分类不稳）。</td></tr>
+<tr><td>8</td><td>目标语言</td><td><code>translation_rules</code></td><td>英 / 日 / 韩…默认中→英。</td></tr>
+<tr><td>9</td><td>翻译策略说明</td><td><code>translation_rules</code></td><td>各类译法方向。无特别要求写"统一意译"。</td></tr>
+<tr><td><span class="imp">10★</span></td><td>应该提取的例子</td><td><code>fewshot_examples</code>（正例）</td><td>贴原文 + 标出哪些是术语、属哪类。<strong>覆盖各种类型</strong>。</td></tr>
+<tr><td><span class="imp">11★</span></td><td>不该提取的例子</td><td><code>fewshot_examples</code>（负例）</td><td>贴<strong>整句无术语</strong>或易误判的原文。负例对降噪极关键，<strong>必写</strong>。</td></tr>
+<tr><td>12</td><td>其他补充</td><td>—</td><td>任何额外说明。</td></tr>
+</table>
+
+<h3>第 4、5 题怎么写得好</h3>
+<div class="vs">
+  <div class="g"><span class="good">✔ 好</span><br>「所有人名/NPC名，不论主次、出场次数，出现即提取：2–4字姓名、老X/小X/阿X、X嫂/X爷、戈老大式排行命名、单字动物角色名(青/燕/隼)」</div>
+  <div class="b"><span class="badx">✘ 差</span><br>「提取重要的人名」（"重要"无法判定，模型会漏掉路人 NPC，召回崩）</div>
+</div>
+<div class="vs">
+  <div class="g"><span class="good">✔ 好</span><br>「不提取：无专有名的通用场所(书房/医馆/夜市)、日常材料(柴火/石灰/绳子)、泛称(大侠/公子/弟子)、成语(一飞冲天)、时间词(子时/春分)」</div>
+  <div class="b"><span class="badx">✘ 差</span><br>「不要提取没用的词」（无判据，降噪无效）</div>
+</div>
+
+<h3>第 10、11 题——样例是性价比最高的投入</h3>
+<p>样例（few-shot）是<strong>对准确率影响最大</strong>的一项：正例提召回，负例提精度。格式随意，标清楚术语+分类即可：</p>
+<div class="grid2">
+  <div class="callout c-tip" style="margin:0">
+    <div class="t">✔ 正例（该提）</div>
+    <p>「万大海常年往来于沦波坊和神仙渡」<br>→ 万大海（NPC名）、沦波坊（地名建筑）、神仙渡（地名建筑）</p>
+  </div>
+  <div class="callout c-bad" style="margin:0">
+    <div class="t">✘ 负例（不该提，整句无术语）</div>
+    <p>「用木炭生火，草鞋踩在石板上嚓嚓作响」→ 无术语<br>「长老说弟子们不得擅自出门」→ 无术语（长老/弟子是泛称）</p>
+  </div>
+</div>
+<div class="callout c-warn">
+  <div class="t">⚠ 负例一定要配几条"整句空结果"</div>
+  <p>只给正例、不给"这句什么都不提"的负例，模型会倾向多抓 → 噪音飙升。每个项目<strong>至少配 3–5 条负例</strong>，专挑容易误判的句子。</p>
+</div>
+</section>
+
+<!-- ════════ WHY ════════ -->
+<section id="why">
+<h2><span class="n">5</span>为什么这样能提准（原理）</h2>
+<p>理解每个字段落到哪里、起什么作用，你才知道效果不好时该改哪。</p>
+<table>
+<tr><th>Profile 字段</th><th>来自第几题</th><th>进入哪里</th><th>对准确率的作用</th></tr>
+<tr><td><code>core_principle</code></td><td>4</td><td>系统提示正文</td><td><span class="imp">高</span> · 定"抓什么"的总基调</td></tr>
+<tr><td><code>extract_examples.include</code></td><td>4</td><td>系统提示 ✔ 提取清单</td><td><span class="imp">高</span> · 提召回</td></tr>
+<tr><td><code>extract_examples.exclude</code></td><td>5</td><td>系统提示 ✘ 不提取清单</td><td><span class="imp">高</span> · 降噪</td></tr>
+<tr><td><code>extraction_notes</code></td><td>6</td><td>用户提示·编号规则</td><td>高 · 处理边界 / 易混</td></tr>
+<tr><td><code>fewshot_examples</code></td><td>10 + 11</td><td>用户提示·示例</td><td><span class="imp">最高</span> · 正例提召回，负例提精度</td></tr>
+<tr><td><code>term_categories</code></td><td>7</td><td>用户提示·分类选项</td><td>中 · 决定分类质量</td></tr>
+<tr><td><code>rule_extractors</code>（百家姓）</td><td>自动内置</td><td>代码·分词+姓氏→人名提示</td><td>人名召回兜底（2–3字姓名）</td></tr>
+<tr><td><code>address_suffixes</code></td><td>自动 / 进阶</td><td>代码·去派生变体</td><td>精度 · 冯大哥/冯大爷 去重为"冯"</td></tr>
+<tr><td><code>filterable_categories</code></td><td>自动 / 进阶</td><td>代码·按类过滤</td><td>精度 · 整类丢弃（术语表命中的除外）</td></tr>
+<tr><td>术语表（外部文件）</td><td>资料②</td><td>命中保护 / 套译 / 向量参考</td><td><span class="imp">最高</span> · 召回主力 + 译文统一</td></tr>
+<tr><td><code>translation_rules</code></td><td>8 + 9</td><td>翻译方向记录</td><td>翻译参考（当前主要作人工与后续译法依据，不直接注入翻译提示）</td></tr>
+</table>
+
+<h3>两条决定成败的机制</h3>
+<div class="grid2">
+  <div class="card">
+    <h4>① 3 票一致才保留</h4>
+    <p>同一段文本用 3 个不同"随机度"各跑一遍，<strong>3 次都提到的词才算数</strong>。好处是精度高；代价是——<strong>指令含糊会让三轮不一致，词被丢掉</strong>（变成漏报）。</p>
+    <p><strong>对策：</strong>规则写得斩钉截铁。用"<strong>出现即提取，不论主次</strong>"这种绝对口吻，别用"重要的""酌情"。越确定，三轮越一致，召回越稳。</p>
+  </div>
+  <div class="card">
+    <h4>② 术语表 = 召回安全网</h4>
+    <p>AI 真正的角色是"上下文过滤器"——把术语表扫出的大量候选<strong>降噪</strong>。命中术语表的词被<strong>豁免过滤</strong>，不会被误删。</p>
+    <p><strong>对策：</strong>发现某些该提的词总被漏 / 被误删，最有效的修法不是改 prompt，而是<strong>把这些词补进术语表</strong>。</p>
+  </div>
+</div>
+</section>
+
+<!-- ════════ TUNE ════════ -->
+<section id="tune">
+<h2><span class="n">6</span>调优迭代环：看到问题改哪里</h2>
+<p>第一批跑完，对照下表精确定位。<strong>每次只改一两处，重跑小样本验证</strong>，别一把全改。</p>
+<table>
+<tr><th>症状</th><th>首选修法</th><th>备选</th></tr>
+<tr>
+  <td><span class="badx">漏报</span>：该提的术语没提</td>
+  <td>把漏掉的词<strong>补进术语表</strong>（最有效）</td>
+  <td>第 10 题加正例；第 4 题 include 写明这类；核对第 6 题规则是否够"绝对"（让三轮一致）</td>
+</tr>
+<tr>
+  <td><span class="badx">误报</span>：不该提的被提了</td>
+  <td>第 11 题加<strong>负例</strong>（含该词的整句→空结果）</td>
+  <td>第 5 题 exclude 补该类；该类整体没用→设为 <code>filterable_categories</code></td>
+</tr>
+<tr>
+  <td>分类错 / 乱</td>
+  <td>第 10 题样例里把该词标对 <code>category</code></td>
+  <td>精简第 7 题分类列表，去掉重叠的类</td>
+</tr>
+<tr>
+  <td>人名漏（4字以上 / 单字名）</td>
+  <td>第 6 题写明规则 + 第 10 题给样例</td>
+  <td>2–3 字姓名已由百家姓自动兜底，无需操心</td>
+</tr>
+<tr>
+  <td>NPC 称呼重复（冯大哥、冯大爷、冯）</td>
+  <td>已自动归并为词干"冯"</td>
+  <td>若该保留全称，把全称加进术语表即可豁免</td>
+</tr>
+<tr>
+  <td>译文不统一 / 不达意</td>
+  <td><strong>补术语表</strong>（精确命中直接套已有译文）</td>
+  <td>第 9 题写清该类译法方向</td>
+</tr>
+</table>
+<div class="callout c-tip">
+  <div class="t">✔ 边跑边长术语表</div>
+  <p>每跑完一批，把人工确认无误的术语<strong>回灌进术语表</strong>。下一批的召回、精度、译文统一度都会随之提升——这是收益最高的习惯。</p>
+</div>
+</section>
+
+<!-- ════════ PITFALLS ════════ -->
+<section id="pit">
+<h2><span class="n">7</span>常见坑 &amp; FAQ</h2>
+<div class="card">
+  <h3 style="margin-top:4px">最常见的五个坑</h3>
+  <ol>
+    <li><strong>术语表太薄</strong> → 召回直接崩（它是召回主力）。宁可多塞，错了也比漏了好补。</li>
+    <li><strong>只写正例不写负例</strong> → 噪音飙升。负例（整句空结果）必配。</li>
+    <li><strong>规则用"重要的""酌情"</strong> → 三轮投票不一致，词被丢。改成"出现即提取"这种绝对口吻。</li>
+    <li><strong>分类列太多太细</strong> → 模型分类摇摆。够用就好。</li>
+    <li><strong>一上来全量跑</strong> → profile 没调对，全量等于烧钱。先小样本。</li>
+  </ol>
+</div>
+<h3>FAQ</h3>
+<div class="callout c-info"><div class="t">Q：必须有术语表才能跑吗？</div><p>不必须，但强烈建议。无表召回会明显偏低、译文不统一。至少手凑核心人物+核心系统词的小表垫着，再边跑边补。</p></div>
+<div class="callout c-info"><div class="t">Q：源文件里的 <code>{0}</code>、<code>${name}</code>、<code>&lt;color&gt;</code> 要先清吗？</div><p>不用，自动剥离。</p></div>
+<div class="callout c-info"><div class="t">Q：列名不规范，系统认错列怎么办？</div><p>跑前在界面会显示识别到的列，手动确认 / 改正即可。</p></div>
+<div class="callout c-info"><div class="t">Q：跑到一半断了？</div><p>重传相同文件、选相同 profile，自动从断点续跑，不重复花费。</p></div>
+<div class="callout c-info"><div class="t">Q：百家姓、称谓后缀这些要我填吗？</div><p>不用。百家姓人名兜底已内置；称谓后缀是进阶项，默认沿用，特殊需求再找工程调。</p></div>
+</section>
+
+<!-- ════════ APPENDIX ════════ -->
+<section id="appendix">
+<h2><span class="n">附</span>一个完整 Profile 长什么样</h2>
+<p>仅供参考"成品形态"——<strong>你只填表，这步由工程/AI 完成</strong>。下面是燕云项目的真实节选（已加注释）：</p>
+<pre><code><span class="cm"># 题2 → 游戏定调</span>
+<span class="ky">game_type</span>: <span class="st">"古风武侠开放世界（燕云十六州）"</span>
+
+<span class="cm"># 题4 → 抓什么的总纲（进系统提示）</span>
+<span class="ky">core_principle</span>: |
+  文本中出现的中文人名——无论主线、路人、单次提及——一律提取。
+  人物重要性、出场次数、是否主线，都不影响。出现即术语。
+
+<span class="cm"># 自动内置：百家姓 2–3 字姓名兜底，无需你填</span>
+<span class="ky">rule_extractors</span>:
+  <span class="ky">surname_names</span>: { <span class="ky">surnames</span>: <span class="st">"赵钱孙李…"</span>, <span class="ky">min_len</span>: 2, <span class="ky">max_len</span>: 3 }
+
+<span class="cm"># 题6 → 边界 / 易混规则</span>
+<span class="ky">extraction_notes</span>:
+  - <span class="st">"老X、小X、阿X、X嫂、X爷、X娘…一个不漏"</span>
+  - <span class="st">"通用称谓不提取：先生、大侠、公子、弟子（非专名一部分时）"</span>
+
+<span class="cm"># 题4/5 → 提取范围清单（进系统提示）</span>
+<span class="ky">extract_examples</span>:
+  <span class="ky">include</span>: [<span class="st">"武学招式"</span>, <span class="st">"NPC全名"</span>, <span class="st">"门派势力"</span>, <span class="st">"排行命名(戈老大)"</span> …]
+  <span class="ky">exclude</span>: [<span class="st">"日常物品(木炭/草鞋)"</span>, <span class="st">"泛称(大侠/公子)"</span>, <span class="st">"成语"</span>, <span class="st">"时间词"</span>]
+
+<span class="cm"># 题10/11 → 正例 + 负例（最影响准确率）</span>
+<span class="ky">fewshot_examples</span>:
+  - { <span class="ky">input</span>: <span class="st">"青长老说墨门弟子需恪守门规"</span>,
+      <span class="ky">output</span>: [青长老→NPC名, 墨门→门派势力, 门规→门派系统] }
+  - { <span class="ky">input</span>: <span class="st">"用木炭生火，草鞋踩在石板上"</span>, <span class="ky">output</span>: [] }   <span class="cm"># 负例：空</span>
+
+<span class="cm"># 题7 → 分类清单</span>
+<span class="ky">term_categories</span>: [武学招式, NPC名, 门派势力, 地名建筑, 道具物品 …]
+
+<span class="cm"># 自动 / 进阶：整类丢弃</span>
+<span class="ky">filterable_categories</span>: [通用物品, 通用NPC]
+
+<span class="cm"># 题8/9 → 翻译方向（记录用）</span>
+<span class="ky">translation_rules</span>: [<span class="st">"角色名→音译"</span>, <span class="st">"招式→意译"</span>, <span class="st">"地点→意译为主"</span>]</code></pre>
+<div class="callout c-tip">
+  <div class="t">✔ 一句话收尾</div>
+  <p><strong>资料备齐（尤其术语表）→ 填一张表 → 小样本试跑 → 按症状回填迭代。</strong>把这条环跑顺，准确率就稳了。</p>
+</div>
+</section>
+
+<footer>
+  游戏术语抽取工具 · 项目 Profile 撰写指南（PM 版）　|　配套：<code>docs/项目配置填写表.xlsx</code>、<code>profiles/*.yaml</code>　|　内容依据当前流水线实现整理
+</footer>
+
+</main>
+</div>
+</body>
+</html>

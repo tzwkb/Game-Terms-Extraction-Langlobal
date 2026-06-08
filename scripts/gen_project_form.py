@@ -1,21 +1,29 @@
-"""生成简化版项目信息填写表，供项目经理填写，由 AI 解析为 YAML 配置。"""
+"""Generate the project-info intake form for PMs (optimized per Profile 撰写指南).
+AI later parses the filled form into profiles/<game>.yaml.
+4 columns: 问题 | 填写提示 | 参考示例(燕云) | 请在这里填写.
+"""
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 
 OUT = "/Users/spellbook/Desktop/Langlobal/AI Lab/Game-Terms-Extraction-Langlobal/docs/项目配置填写表.xlsx"
+LAST_COL = 4  # A..D
 
 HEADER_FILL  = PatternFill("solid", fgColor="1F4E79")
 SECTION_FILL = PatternFill("solid", fgColor="2E75B6")
-INPUT_FILL   = PatternFill("solid", fgColor="FFFDE7")
-HINT_FILL    = PatternFill("solid", fgColor="F5F5F5")
+STAR_FILL    = PatternFill("solid", fgColor="FBF3DF")  # glossary / high-impact highlight
+INPUT_FILL   = PatternFill("solid", fgColor="FFFDE7")  # yellow = type here
+HINT_FILL    = PatternFill("solid", fgColor="F5F5F5")  # gray = hint
+EXAMPLE_FILL = PatternFill("solid", fgColor="EAF3FB")  # light blue = reference example
 WHITE_FILL   = PatternFill("solid", fgColor="FFFFFF")
 
 HEADER_FONT  = Font(bold=True, color="FFFFFF", size=12)
 SECTION_FONT = Font(bold=True, color="FFFFFF", size=10)
 LABEL_FONT   = Font(bold=True, size=10)
+STAR_FONT    = Font(bold=True, size=10, color="B07D12")
 HINT_FONT    = Font(italic=True, color="888888", size=9)
+EX_FONT      = Font(color="1B5E9A", size=9)
 BODY_FONT    = Font(size=10)
+NOTE_FONT    = Font(color="7A560C", size=9)
 
 BORDER = Border(
     left=Side(style="thin", color="CCCCCC"),
@@ -28,34 +36,44 @@ CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
 
 def apply(cell, fill=None, font=None, align=WRAP, border=BORDER):
-    if fill:   cell.fill   = fill
-    if font:   cell.font   = font
+    if fill:   cell.fill = fill
+    if font:   cell.font = font
     if align:  cell.alignment = align
     if border: cell.border = border
 
 
-def section_header(ws, row, text):
+def banner(ws, row, text, fill, font, height, align=CENTER):
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=LAST_COL)
     c = ws.cell(row=row, column=1, value=text)
-    apply(c, fill=SECTION_FILL, font=SECTION_FONT, align=CENTER)
-    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
-    ws.row_dimensions[row].height = 24
+    apply(c, fill=fill, font=font, align=align)
+    for col in range(2, LAST_COL + 1):
+        apply(ws.cell(row=row, column=col), fill=fill, border=BORDER)
+    ws.row_dimensions[row].height = height
 
 
-def question_row(ws, row, label, hint, input_height=40):
-    # col1: 题号+问题
+def section_header(ws, row, text):
+    banner(ws, row, text, SECTION_FILL, SECTION_FONT, 24)
+
+
+def checklist_row(ws, row, label, desc, height, star=False):
+    """col1 = item label; col2..D merged = description."""
     lc = ws.cell(row=row, column=1, value=label)
-    apply(lc, fill=WHITE_FILL, font=LABEL_FONT)
+    apply(lc, fill=(STAR_FILL if star else WHITE_FILL), font=(STAR_FONT if star else LABEL_FONT))
+    ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=LAST_COL)
+    dc = ws.cell(row=row, column=2, value=desc)
+    apply(dc, fill=(STAR_FILL if star else HINT_FILL), font=(NOTE_FONT if star else BODY_FONT))
+    for col in range(3, LAST_COL + 1):
+        apply(ws.cell(row=row, column=col), fill=(STAR_FILL if star else HINT_FILL), border=BORDER)
+    ws.row_dimensions[row].height = height
 
-    # col2: 提示（灰色小字）
-    hc = ws.cell(row=row, column=2, value=hint)
-    apply(hc, fill=HINT_FILL, font=HINT_FONT)
 
-    # col3: 填写区（淡黄）
-    ic = ws.cell(row=row, column=3, value="")
-    apply(ic, fill=INPUT_FILL, font=BODY_FONT)
-
-    ws.row_dimensions[row].height = input_height
-    return ic
+def question_row(ws, row, label, hint, example, height=40, star=False):
+    lc = ws.cell(row=row, column=1, value=label)
+    apply(lc, fill=(STAR_FILL if star else WHITE_FILL), font=(STAR_FONT if star else LABEL_FONT))
+    apply(ws.cell(row=row, column=2, value=hint), fill=HINT_FILL, font=HINT_FONT)
+    apply(ws.cell(row=row, column=3, value=example), fill=EXAMPLE_FILL, font=EX_FONT)
+    apply(ws.cell(row=row, column=4, value=""), fill=INPUT_FILL, font=BODY_FONT)
+    ws.row_dimensions[row].height = height
 
 
 def main():
@@ -63,163 +81,130 @@ def main():
     ws = wb.active
     ws.title = "项目信息填写表"
 
-    ws.column_dimensions["A"].width = 22
-    ws.column_dimensions["B"].width = 36
-    ws.column_dimensions["C"].width = 50
+    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["B"].width = 40
+    ws.column_dimensions["C"].width = 38
+    ws.column_dimensions["D"].width = 46
 
-    # ── 总标题 ──────────────────────────────────────────────────────────────
-    ws.merge_cells("A1:C1")
-    c = ws.cell(row=1, column=1, value="游戏术语抽取 — 项目信息填写表")
-    apply(c, fill=HEADER_FILL, font=HEADER_FONT, align=CENTER)
-    ws.row_dimensions[1].height = 36
+    # ── Title + guide ─────────────────────────────────────────────
+    banner(ws, 1, "游戏术语抽取 — 项目信息填写表", HEADER_FILL, HEADER_FONT, 36)
+    banner(ws, 2,
+           "🟡 只填最后一列（黄色）  |  第三列是燕云项目参考示例，照着写  |  ★ 题最影响准确率，请重点写  |  详见配套《Profile撰写指南.html》",
+           HINT_FILL, HINT_FONT, 20)
 
-    ws.merge_cells("A2:C2")
-    c = ws.cell(row=2, column=1,
-                value="🟡 黄色区域请填写  |  灰色为填写提示，不用修改  |  填完后原文件发回即可")
-    apply(c, fill=HINT_FILL, font=HINT_FONT, align=CENTER)
-    ws.row_dimensions[2].height = 18
+    row = 3
 
-    # ── 栏头 ─────────────────────────────────────────────────────────────────
-    for col, text in [(1, "问题"), (2, "填写提示"), (3, "⬇ 请在这里填写")]:
-        c = ws.cell(row=3, column=col, value=text)
-        apply(c, fill=SECTION_FILL, font=SECTION_FONT, align=CENTER)
-    ws.row_dimensions[3].height = 22
-
-    row = 4
-
-    # ── 第一部分：基本信息 ──────────────────────────────────────────────────
-    section_header(ws, row, "一、基本信息")
+    # ── 第零部分：开工前先备齐资料 ────────────────────────────────
+    section_header(ws, row, "零、开工前先备齐这些资料（不用填，自查清单）")
+    row += 1
+    checklist_row(ws, row,
+        "☐ 源文件",
+        "游戏文本 .xlsx，至少一列是中文原文。变量占位符（{0}、${name}、<color> 等）自动剥离，不用手动清。可多文件分批（剧情/UI/技能拆开更好管）。",
+        58)
+    row += 1
+    checklist_row(ws, row,
+        "☐ 术语表 ★命门",
+        "已有「中文术语 | 英文翻译」两列的 .xlsx。它是准确率命门：命中词被保护不误删、直接套用已有译文、并作新词近义参考——实测约九成召回靠它。"
+        "来源：官方词表 / 历史项目 TM / 人物表 / 技能表 / 道具表，能并就并，越全越准。没有？先凑核心人物+核心系统词的小表垫着，跑完把确认的术语回灌，边跑边长。",
+        96, star=True)
+    row += 1
+    checklist_row(ws, row,
+        "☐ 填表素材",
+        "世界观设定、人物/技能/道具/地名表、游戏系统结构、试译反馈、客户 brief——用来把下面 12 题填准。",
+        46)
     row += 1
 
-    question_row(ws, row,
-        "1. 游戏名称",
-        "游戏的完整中文名称",
-        30)
+    # ── 栏头 ──────────────────────────────────────────────────────
+    for col, text in [(1, "问题"), (2, "填写提示"), (3, "✍ 参考示例（燕云）"), (4, "⬇ 请在这里填写")]:
+        apply(ws.cell(row=row, column=col, value=text), fill=SECTION_FILL, font=SECTION_FONT, align=CENTER)
+    ws.row_dimensions[row].height = 22
     row += 1
 
-    question_row(ws, row,
-        "2. 游戏风格 / 世界观",
-        "例如：古风武侠、西幻奇幻、科幻末日、现代都市……\n一两句话描述游戏背景即可",
-        50)
-    row += 1
+    # ── 一、基本信息 ──────────────────────────────────────────────
+    section_header(ws, row, "一、基本信息"); row += 1
+    question_row(ws, row, "1. 游戏名称", "游戏的完整中文名称。",
+        "燕云十六州", 30); row += 1
+    question_row(ws, row, "2. 游戏风格 / 世界观",
+        "一两句定调，模型据此定身份。\n例如：古风武侠、西幻奇幻、科幻末日、现代都市……",
+        "古风武侠开放世界，五代乱世背景，含墨家机关术。", 48); row += 1
+    question_row(ws, row, "3. 本次任务说明",
+        "一句话说明用途。",
+        "抽取游戏内所有专有名词，供翻译团队使用。", 40); row += 1
 
-    question_row(ws, row,
-        "3. 本次任务说明",
-        "例如：抽取游戏内所有专有名词供翻译团队使用",
-        40)
-    row += 1
+    # ── 二、要提取什么 ────────────────────────────────────────────
+    section_header(ws, row, "二、要提取的内容（告诉 AI 抓什么 · 影响最大）"); row += 1
+    question_row(ws, row, "4. ★ 必须提取的术语类型",
+        "逐类列全，越详细越好。\n"
+        "⚠ 关键：用「出现即提取，不论主次」这种绝对口吻，别用「重要的/酌情」——"
+        "系统要 3 轮一致才保留，口径越绝对越不漏。",
+        "· 所有人名/NPC名（含路人、单次提及，出现即提取）\n"
+        "· 武学招式 / 心法\n· 墨家机关术\n· 地名建筑、门派势力\n"
+        "· 道具圣物、货币资源\n· 战斗 BUFF / 机制、UI 系统、玩法机制",
+        150, star=True); row += 1
+    question_row(ws, row, "5. ★ 不要提取的内容",
+        "列出噪音类型，这是降噪主力。",
+        "· 通用日常物品（木炭、草鞋、柴火）\n"
+        "· 泛称/称谓（大侠、公子、弟子、长老）\n"
+        "· 无专名场所（书房、医馆、夜市）\n"
+        "· 成语（一飞冲天）\n· 时间词（子时、春分）",
+        128, star=True); row += 1
+    question_row(ws, row, "6. ★ 特别注意事项",
+        "专写容易搞混的边界规则，写成可判定的硬规则。",
+        "· 老X/小X/阿X、X嫂/X爷/X娘 一律人名，一个不漏\n"
+        "· 排行命名（戈老大、戈老二、钱二娘）全部提取\n"
+        "· 单字动物名作角色名时提取（青、燕、隼）\n"
+        "·「青」是角色名要提，「青色」不提",
+        110, star=True); row += 1
 
-    # ── 第二部分：要提取什么 ───────────────────────────────────────────────
-    section_header(ws, row, "二、要提取的内容（告诉 AI 抓什么）")
-    row += 1
+    # ── 三、术语分类 ──────────────────────────────────────────────
+    section_header(ws, row, "三、术语分类"); row += 1
+    question_row(ws, row, "7. 术语分类列表",
+        "每行一类，够用即可，别过细——分类太多太细模型会摇摆。\n"
+        "可直接复制示例改。",
+        "武学招式、武学心法、墨家机关、NPC名、BOSS名、\n"
+        "门派势力、地名建筑、道具物品、圣物法宝、\n"
+        "代币货币、资源材料、战斗BUFF、战斗机制、\n"
+        "UI系统、玩法机制、任务名",
+        160); row += 1
 
-    question_row(ws, row,
-        "4. 必须提取的术语类型",
-        "用自然语言列出所有需要提取的类型。\n"
-        "例如：\n"
-        "· 所有人名/NPC名（不管主次）\n"
-        "· 武学招式名\n"
-        "· 地点、建筑名\n"
-        "· 门派、组织名\n"
-        "· 道具、圣物名\n"
-        "· 战斗技能/BUFF名\n"
-        "……越详细越好",
-        160)
-    row += 1
+    # ── 四、翻译策略 ──────────────────────────────────────────────
+    section_header(ws, row, "四、翻译策略（选填）"); row += 1
+    question_row(ws, row, "8. 目标语言",
+        "默认中→英。",
+        "英文", 30); row += 1
+    question_row(ws, row, "9. 翻译策略说明",
+        "各类译法方向。无特别要求写「统一意译」即可。",
+        "· 人名 → 音译（拼音）\n· 招式/心法 → 意译，传达含义\n"
+        "· 地点 → 意译为主\n· 道具 → 简洁意译\n"
+        "· 称谓 → 公子=Master，长老=Elder",
+        110); row += 1
 
-    question_row(ws, row,
-        "5. 不要提取的内容",
-        "例如：\n"
-        "· 日常通用物品（木炭、草鞋）\n"
-        "· 泛称/称谓（大侠、公子、弟子）\n"
-        "· 时间词（子时、春分）\n"
-        "· 成语固定短语",
-        120)
-    row += 1
-
-    question_row(ws, row,
-        "6. 特别注意事项",
-        '有没有容易搞混的边界情况？\n'
-        '例如：\n'
-        '· "青"单独出现时是角色名要提取，但"青色"不要\n'
-        '· 带"老X、小X、阿X"前缀的一律是人名要提取\n'
-        '· 排行式命名（戈老大、戈老二）全部提取',
-        100)
-    row += 1
-
-    # ── 第三部分：术语分类 ─────────────────────────────────────────────────
-    section_header(ws, row, "三、术语分类")
-    row += 1
-
-    question_row(ws, row,
-        "7. 术语分类列表",
-        "列出这个游戏的术语分类，每行一个。\n"
-        "常见参考：\n"
-        "NPC名、BOSS名、武学招式、武学心法、\n"
-        "地名建筑、场景区域、门派势力、组织帮会、\n"
-        "道具物品、圣物法宝、代币货币、资源材料、\n"
-        "战斗BUFF、战斗机制、UI系统、玩法机制、\n"
-        "任务名、成就称号、外观皮肤\n"
-        "（可以直接复制修改，也可自己写）",
-        200)
-    row += 1
-
-    # ── 第四部分：翻译方向 ─────────────────────────────────────────────────
-    section_header(ws, row, "四、翻译策略（选填）")
-    row += 1
-
-    question_row(ws, row,
-        "8. 目标语言",
-        "例如：英文、日文、韩文、繁体中文……",
-        30)
-    row += 1
-
-    question_row(ws, row,
-        "9. 翻译策略说明",
-        "对各类术语的翻译方向说明。\n"
-        "例如：\n"
-        "· 人名：音译（拼音）\n"
-        "· 招式名：意译，传达含义\n"
-        "· 地点：意译为主\n"
-        "· 称谓（公子、长老）：对应英文 Master / Elder\n"
-        '如果没有特别要求，写"统一意译"即可',
-        120)
-    row += 1
-
-    # ── 第五部分：举例 ─────────────────────────────────────────────────────
-    section_header(ws, row, "五、举例（越多越准确）")
-    row += 1
-
-    question_row(ws, row,
-        "10. 应该提取的例子",
-        "贴几条游戏原文，标注哪些词是术语。\n"
-        "格式随意，例如：\n"
+    # ── 五、举例 ──────────────────────────────────────────────────
+    section_header(ws, row, "五、举例（最影响准确率 · 正例提召回，负例提精度）"); row += 1
+    question_row(ws, row, "10. ★ 应该提取的例子",
+        "贴几条原文 + 标出哪些是术语、属哪类。\n覆盖各种类型，越多越准。",
         "「万大海常年往来于沦波坊和神仙渡」\n"
-        "→ 万大海（NPC名）、沦波坊（地名）、神仙渡（地名）\n\n"
-        "多写几条，覆盖不同类型的术语",
-        200)
-    row += 1
-
-    question_row(ws, row,
-        "11. 不该提取的例子",
-        "贴几条不含术语、或容易误判的原文。\n"
-        "格式随意，例如：\n"
+        "→ 万大海(NPC名)、沦波坊(地名建筑)、神仙渡(地名建筑)\n\n"
+        "「青长老说墨门弟子需恪守门规」\n"
+        "→ 青长老(NPC名)、墨门(门派势力)、门规(玩法机制)",
+        130, star=True); row += 1
+    question_row(ws, row, "11. ★ 不该提取的例子",
+        "⚠ 必填，至少 3–5 条「整句无术语」或易误判的句子。\n"
+        "只给正例不给负例 → 噪音飙升。",
         "「用木炭生火，草鞋踩在石板上」→ 无术语\n"
-        "「先生说弟子不得擅自出门」→ 无术语（先生/弟子是泛称）",
-        120)
-    row += 1
+        "「长老说弟子们不得擅自出门，游侠也不例外」\n　→ 无术语（长老/弟子/游侠是泛称）\n"
+        "「他一飞冲天，大鹏展翅般冲出」→ 无术语（成语）",
+        120, star=True); row += 1
 
-    # ── 第六部分：其他 ─────────────────────────────────────────────────────
-    section_header(ws, row, "六、其他补充（选填）")
-    row += 1
-
-    question_row(ws, row,
-        "12. 其他说明",
-        "有什么额外需要告知的信息，都可以写在这里。",
-        80)
+    # ── 六、其他 ──────────────────────────────────────────────────
+    section_header(ws, row, "六、其他补充（选填）"); row += 1
+    question_row(ws, row, "12. 其他说明",
+        "任何额外需要告知的信息。",
+        "（如：某些章节用方言；客户要求保留繁体专名……）",
+        72)
 
     wb.save(OUT)
-    print(f"已生成：{OUT}")
+    print(f"saved: {OUT}")
 
 
 if __name__ == "__main__":
