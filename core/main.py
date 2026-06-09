@@ -204,22 +204,37 @@ def _collect_llm_votes(raw_v_all):
     return all_votes
 
 
-def _count_llm_votes(all_votes):
-    term_counts, term_data = {}, {}
+def _pick_category(cat_counts: dict, allow: set) -> str:
+    """多数表决分类：优先得票最高的合法分类(在 profile.term_categories 内)；全部超纲时退回模型多数票，保留术语不丢。"""
+    if not cat_counts:
+        return ""
+    if allow:
+        in_allow = {c: n for c, n in cat_counts.items() if c in allow}
+        if in_allow:
+            return max(in_allow.items(), key=lambda kv: (kv[1], kv[0]))[0]
+    return max(cat_counts.items(), key=lambda kv: (kv[1], kv[0]))[0]
+
+
+def _count_llm_votes(all_votes, allowed_categories=None):
+    allow = set(allowed_categories or [])
+    term_counts, term_cats, term_disp, term_eng = {}, {}, {}, {}
     for t in all_votes:
         k = t["term"].lower()
         term_counts[k] = term_counts.get(k, 0) + 1
-        if k not in term_data:
-            term_data[k] = t
-        elif not term_data[k].get("eng_term") and t.get("eng_term"):
-            term_data[k] = {**term_data[k], "eng_term": t["eng_term"]}
+        cat = (t.get("category") or "").strip()
+        if cat:
+            c = term_cats.setdefault(k, {})
+            c[cat] = c.get(cat, 0) + 1
+        if k not in term_disp:
+            term_disp[k] = t["term"]
+        if not term_eng.get(k) and t.get("eng_term"):
+            term_eng[k] = t["eng_term"]
     results = []
     for k, cnt in term_counts.items():
         if cnt >= 3:
-            td = term_data[k]
-            out = {"term": td["term"], "category": td["category"]}
-            if td.get("eng_term"):
-                out["eng_term"] = td["eng_term"]
+            out = {"term": term_disp[k], "category": _pick_category(term_cats.get(k, {}), allow)}
+            if term_eng.get(k):
+                out["eng_term"] = term_eng[k]
             results.append(out)
     return results
 
@@ -316,7 +331,7 @@ def extract_terms(texts: List[str], profile: dict, api_key: str, base_url: str, 
                     json.dump(r, f, ensure_ascii=False, indent=2, default=str)
 
         llm_votes = _collect_llm_votes(raw_v_all)
-        batch_results = _count_llm_votes(llm_votes)
+        batch_results = _count_llm_votes(llm_votes, profile.get("term_categories"))
         results.extend(batch_results)
 
         dt = time.time() - t_batch

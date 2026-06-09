@@ -27,9 +27,11 @@ def build_system_prompt(profile: Dict[str, Any]) -> str:
 
 
 def _build_rules(profile: Dict[str, Any]) -> str:
-    base = ["提取游戏专有名词：人名、地名、物品名、技能名、机构名、事件名、称谓"]
+    cats = "、".join(profile.get("term_categories", []))
+    lead = (f"只提取以下类型的游戏专有名词：{cats}" if cats
+            else "提取游戏专有名词：人名、地名、物品名、技能名、机构名、事件名、称谓")
     notes = profile.get("extraction_notes", [])
-    rules = base + notes
+    rules = [lead] + notes
     return "提取规则：\n" + "\n".join(f"{i+1}. {r}" for i, r in enumerate(rules))
 
 
@@ -40,7 +42,7 @@ def _build_ner_hint(ner_hints: dict) -> str:
     places = ner_hints.get("places", [])
     if not persons and not places:
         return ""
-    lines = "【预识别命名实体】以下人名和地名已确认出现在上述文本中，必须逐一检查并提炼为术语（人名→NPC名，地名→地名建筑）：\n"
+    lines = "【预识别命名实体】以下人名和地名已确认出现在上述文本中，必须逐一检查并提炼为术语（请按上方给定的术语分类归类）：\n"
     if persons:
         lines += f"人名（{len(persons)}个）：{'、'.join(persons)}\n"
     if places:
