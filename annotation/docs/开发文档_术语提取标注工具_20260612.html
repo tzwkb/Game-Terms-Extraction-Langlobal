@@ -226,7 +226,7 @@ footer .f-text { font-family: var(--mono); font-size: 11px; color: var(--ink-sof
       <tr><td class="t-key">项目生命周期<br><span class="mono" style="font-weight:400">需求 1</span></td><td>新建 / 手动保存 / 加载项目；自动保存间隔可配；工程文件采用 demo v2.4 同构 JSON（即需求所述"Trados json"），含原文 + 术语 + 列配置，加载一键复原无需二次导入，与 demo 存档双向兼容；崩溃草稿自动恢复；行号跳转与术语操作后定位</td></tr>
       <tr><td class="t-key">导入与配置<br><span class="mono" style="font-weight:400">需求 2</span></td><td>原文 Excel 导入；列显隐控制；Key / 原文 / 译文列绑定；术语表导入按模板自动识别字段（含别名容错），与 AI 提取结果合并融合——冲突三策略：<strong>跳过已有（默认）/ 仅补空白字段 / 覆盖</strong>；一键清空筛选、一键清空术语；快速批量添加（多选勾选 + Shift 连选 + 统一分类）</td></tr>
       <tr><td class="t-key">全局检索<br><span class="mono" style="font-weight:400">需求 3</span></td><td>Key / 原文 / 译文列 包含 · 不包含 · 等于；译文列另支持 为空 / 不为空（漏译排查）</td></tr>
-      <tr><td class="t-key">术语库<br><span class="mono" style="font-weight:400">需求 4</span></td><td>8 列模板导出；按审核状态 / 分类筛选；修订时间排序；分类标签增删（改名联动全库）；术语原文 + 译文搜索；逐条 审核切换 / 编辑 / 删除 / 点击定位（多处出现循环跳转）</td></tr>
+      <tr><td class="t-key">术语库<br><span class="mono" style="font-weight:400">需求 4</span></td><td>8 列模板导出；按审核状态 / 分类筛选；修订时间排序；分类标签增删（改名联动全库）；术语原文 + 译文搜索；逐条 审核切换 / 编辑 / 删除 / 点击定位（多处出现循环跳转）；手动新增术语（直接填原文/分类/译文/备注）——与划词、整行、批量、导入合并共五种添加方式</td></tr>
     </tbody>
   </table>
 
@@ -248,7 +248,7 @@ footer .f-text { font-family: var(--mono); font-size: 11px; color: var(--ink-sof
   <div class="steps">
     <div class="step"><div>导入原文 → 选 Key / 原文 / 译文列 → 表格渲染、高亮就绪</div></div>
     <div class="step"><div>导入候选术语（提取工具产物）→ 选合并策略 → 术语入库并全表高亮</div></div>
-    <div class="step"><div>标注：划词按 <kbd>A</kbd> ／ 行首 ➕ 整行 ／ <kbd>Q</kbd> 批量勾选回车</div></div>
+    <div class="step"><div>标注：划词按 <kbd>A</kbd> ／ 行首 ➕ 整行 ／ <kbd>Q</kbd> 批量勾选回车 ／ 右侧「新增术语」手动录入</div></div>
     <div class="step"><div>审核：侧栏逐条 ✓ 切换；点击术语跳转原文核对，多处出现连点循环</div></div>
     <div class="step"><div>导出 8 列模板 → 回流提取工具</div></div>
   </div>
