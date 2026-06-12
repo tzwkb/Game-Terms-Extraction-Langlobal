@@ -163,29 +163,34 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : m === '>' ? '&gt;' : '&quot;');
 }
 
-function buildAC(words) {
-  if (!words || !words.length) return null;
-  const nodes = [{ next: Object.create(null), fail: 0, out: null }];
-  for (const w of words) {
-    if (!w) continue;
-    let cur = 0;
-    for (const ch of w) {
-      let nxt = nodes[cur].next[ch];
-      if (nxt === undefined) {
-        nxt = nodes.length;
-        nodes.push({ next: Object.create(null), fail: 0, out: null });
-        nodes[cur].next[ch] = nxt;
-      }
-      cur = nxt;
+function acNewNodes() { return [{ next: Object.create(null), fail: 0, out: null }]; }
+
+function acInsert(nodes, w) {
+  if (!w) return;
+  let cur = 0;
+  for (const ch of w) {
+    let nxt = nodes[cur].next[ch];
+    if (nxt === undefined) {
+      nxt = nodes.length;
+      nodes.push({ next: Object.create(null), fail: 0, out: null });
+      nodes[cur].next[ch] = nxt;
     }
-    if (!nodes[cur].out) nodes[cur].out = [];
-    if (!nodes[cur].out.includes(w.length)) nodes[cur].out.push(w.length);
+    cur = nxt;
   }
+  if (!nodes[cur].out) nodes[cur].out = [];
+  if (!nodes[cur].out.includes(w.length)) nodes[cur].out.push(w.length);
+}
+
+function acSeedFail(nodes) {
   const queue = [];
   for (const ch in nodes[0].next) { const v = nodes[0].next[ch]; nodes[v].fail = 0; queue.push(v); }
-  let qi = 0;
-  while (qi < queue.length) {
-    const u = queue[qi++];
+  return queue;
+}
+
+function acFailStep(nodes, queue, qi, limit) {
+  let n = 0;
+  while (qi < queue.length && n < limit) {
+    const u = queue[qi++]; n++;
     for (const ch in nodes[u].next) {
       const v = nodes[u].next[ch];
       let f = nodes[u].fail;
@@ -196,6 +201,10 @@ function buildAC(words) {
       queue.push(v);
     }
   }
+  return qi;
+}
+
+function acWrap(nodes) {
   return {
     search(text) {
       const matches = [];
@@ -213,6 +222,38 @@ function buildAC(words) {
   };
 }
 
+function buildAC(words) {
+  if (!words || !words.length) return null;
+  const nodes = acNewNodes();
+  for (const w of words) acInsert(nodes, w);
+  const queue = acSeedFail(nodes);
+  let qi = 0;
+  while (qi < queue.length) qi = acFailStep(nodes, queue, qi, 1 << 30);
+  return acWrap(nodes);
+}
+
+function buildACAsync(words, onDone, isStale) {
+  if (!words || !words.length) { onDone(null); return; }
+  const nodes = acNewNodes();
+  let i = 0, queue = null, qi = 0;
+  function step() {
+    if (isStale && isStale()) return;
+    const t0 = Date.now();
+    if (queue === null) {
+      while (i < words.length && Date.now() - t0 < 12) {
+        const end = Math.min(words.length, i + 1000);
+        for (; i < end; i++) acInsert(nodes, words[i]);
+      }
+      if (i >= words.length) queue = acSeedFail(nodes);
+    } else {
+      while (qi < queue.length && Date.now() - t0 < 12) qi = acFailStep(nodes, queue, qi, 20000);
+      if (qi >= queue.length) { onDone(acWrap(nodes)); return; }
+    }
+    setTimeout(step, 0);
+  }
+  step();
+}
+
 function pickNonOverlap(matches) {
   matches.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
   const res = [];
@@ -221,11 +262,19 @@ function pickNonOverlap(matches) {
   return res;
 }
 
-function computeWindow(scrollTop, viewH, total, rowH, buffer) {
-  if (total <= 0) return { start: 0, end: 0 };
-  const start = Math.max(0, Math.floor(scrollTop / rowH) - buffer);
-  const end = Math.min(total, Math.ceil((scrollTop + viewH) / rowH) + buffer);
-  return { start, end };
+function computeVirtual(scrollTop, viewH, total, rowH, buffer, maxVirtH) {
+  if (total <= 0) return { start: 0, end: 0, spacerTop: 0, virtH: 0 };
+  const contentH = total * rowH;
+  const virtH = Math.min(contentH, maxVirtH);
+  const denom = Math.max(1, virtH - viewH);
+  const p = Math.min(1, Math.max(0, scrollTop / denom));
+  const trueTop = p * Math.max(0, contentH - viewH);
+  const r0 = Math.floor(trueTop / rowH);
+  const start = Math.max(0, r0 - buffer);
+  const end = Math.min(total, Math.ceil((trueTop + viewH) / rowH) + buffer);
+  let spacerTop = scrollTop - (trueTop % rowH) - (r0 - start) * rowH;
+  if (spacerTop < 0) spacerTop = 0;
+  return { start, end, spacerTop, virtH };
 }
 
 function matchesFilters(row, filters) {
@@ -276,7 +325,7 @@ function mapTemplateHeaders(headerRow) {
 /*CORE-END*/
 
 // ───────────────────────── State ─────────────────────────
-const ROW_H = 84, BUFFER = 8, TERMS_PER_PAGE = 100, CELL_CAP = 600;
+const ROW_H = 84, BUFFER = 8, TERMS_PER_PAGE = 100, CELL_CAP = 600, MAX_VIRT_H = 15000000, AC_SYNC_LIMIT = 20000;
 const S = {
   headers: [], rows: [],
   keyCol: -1, termCol: 2, transCol: -1,
@@ -295,7 +344,7 @@ function bump() { ver++; S.dirty = true; }
 // ───────────────────────── DOM ─────────────────────────
 const $ = id => document.getElementById(id);
 const wrap = $('wrap');
-let tbodyEl = null, theadEl = null;
+let tbodyEl = null, theadEl = null, spTopEl = null, spBotEl = null;
 
 function toast(msg, ms = 2200) {
   let t = document.querySelector('.toast');
@@ -306,30 +355,46 @@ function toast(msg, ms = 2200) {
 }
 
 // ───────────────────── AC / index (debounced, chunked) ─────────────────────
-let acTimer = null, transTimer = null, indexJob = null;
+let acTimer = null, transTimer = null, indexJob = null, acGen = 0, transGen = 0;
 
 function scheduleAC() {
   clearTimeout(acTimer);
-  acTimer = setTimeout(() => { S.acTerms = buildAC([...S.termDetails.keys()]); scheduleRender(true); }, 300);
+  acTimer = setTimeout(() => {
+    const gen = ++acGen;
+    const words = [...S.termDetails.keys()];
+    if (words.length <= AC_SYNC_LIMIT) { S.acTerms = buildAC(words); scheduleRender(true); return; }
+    buildACAsync(words, ac => { S.acTerms = ac; scheduleRender(true); }, () => gen !== acGen);
+  }, 300);
 }
 function scheduleTransAC() {
   clearTimeout(transTimer);
   transTimer = setTimeout(() => {
+    const gen = ++transGen;
     S.transSet = new Set();
     for (const info of S.termDetails.values()) { const t = (info.translation || '').trim(); if (t) S.transSet.add(t); }
-    S.acTrans = buildAC([...S.transSet]);
-    scheduleRender(true);
+    const words = [...S.transSet];
+    if (words.length <= AC_SYNC_LIMIT) { S.acTrans = buildAC(words); scheduleRender(true); return; }
+    buildACAsync(words, ac => { S.acTrans = ac; scheduleRender(true); }, () => gen !== transGen);
   }, 300);
 }
 function rebuildIndexFull(onDone) {
-  if (indexJob) { cancelAnimationFrame(indexJob.raf); clearTimeout(indexJob.tm); }
+  if (indexJob) { clearTimeout(indexJob.tm); }
+  const job = { tm: 0 };
+  indexJob = job;
   S.termIndex = new Map();
   if (!S.rows.length || S.termCol < 0 || !S.termDetails.size) { onDone && onDone(); return; }
-  const ac = buildAC([...S.termDetails.keys()]);
+  const gen = ++acGen;
+  clearTimeout(acTimer);
+  buildACAsync([...S.termDetails.keys()], ac => {
+    if (indexJob !== job) return;
+    S.acTerms = ac;
+    scheduleRender(true);
+    runScan(ac);
+  }, () => indexJob !== job || gen !== acGen);
+
+  function runScan(ac) {
   const CHUNK = 3000;
   let i = 0;
-  const job = { tm: 0, raf: 0 };
-  indexJob = job;
   function step() {
     if (indexJob !== job) return;
     const lim = Math.min(S.rows.length, i + CHUNK);
@@ -358,6 +423,7 @@ function rebuildIndexFull(onDone) {
     }
   }
   step();
+  }
 }
 function indexAddTerm(term) {
   if (!S.rows.length || S.termCol < 0) return;
@@ -492,20 +558,30 @@ function scheduleRender(force) {
 function renderWindow() {
   if (!tbodyEl) return;
   const total = S.visIds.length;
-  const { start, end } = computeWindow(wrap.scrollTop, wrap.clientHeight, total, ROW_H, BUFFER);
-  if (start === lastWin.start && end === lastWin.end && ver === lastWin.ver) return;
-  lastWin = { start, end, ver };
-  let h = `<tr style="height:${start * ROW_H}px;"><td colspan="99" style="padding:0;border:0;"></td></tr>`;
-  for (let p = start; p < end; p++) h += rowHTML(S.visIds[p], p);
-  h += `<tr style="height:${Math.max(0, (total - end)) * ROW_H}px;"><td colspan="99" style="padding:0;border:0;"></td></tr>`;
+  const vw = computeVirtual(wrap.scrollTop, wrap.clientHeight, total, ROW_H, BUFFER, MAX_VIRT_H);
+  const spacerBottom = Math.max(0, vw.virtH - vw.spacerTop - (vw.end - vw.start) * ROW_H);
+  if (vw.start === lastWin.start && vw.end === lastWin.end && ver === lastWin.ver) {
+    if (spTopEl) { spTopEl.style.height = vw.spacerTop + 'px'; spBotEl.style.height = spacerBottom + 'px'; }
+    return;
+  }
+  lastWin = { start: vw.start, end: vw.end, ver };
+  let h = `<tr id="spTop" style="height:${vw.spacerTop}px;"><td colspan="99" style="padding:0;border:0;"></td></tr>`;
+  for (let p = vw.start; p < vw.end; p++) h += rowHTML(S.visIds[p], p);
+  h += `<tr id="spBot" style="height:${spacerBottom}px;"><td colspan="99" style="padding:0;border:0;"></td></tr>`;
   tbodyEl.innerHTML = total ? h : '<tr><td colspan="99" style="text-align:center;padding:30px;color:#94a3b8;">暂无数据（检查筛选条件）</td></tr>';
+  spTopEl = document.getElementById('spTop');
+  spBotEl = document.getElementById('spBot');
 }
 wrap.addEventListener('scroll', () => scheduleRender(false));
 
 function scrollToRow(id, flash = true) {
   const pos = S.visPos.get(id);
   if (pos === undefined) { toast('该行被当前筛选条件隐藏'); return; }
-  wrap.scrollTop = Math.max(0, pos * ROW_H - wrap.clientHeight / 2 + ROW_H / 2);
+  const total = S.visIds.length, viewH = wrap.clientHeight;
+  const contentH = total * ROW_H, virtH = Math.min(contentH, MAX_VIRT_H);
+  let tTop = pos * ROW_H - viewH / 2 + ROW_H / 2;
+  tTop = Math.max(0, Math.min(tTop, Math.max(0, contentH - viewH)));
+  wrap.scrollTop = tTop / Math.max(1, contentH - viewH) * Math.max(0, virtH - viewH);
   if (flash) {
     S.flashId = id;
     scheduleRender(true);

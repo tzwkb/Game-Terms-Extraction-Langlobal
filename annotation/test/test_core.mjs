@@ -9,7 +9,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(here, '..', '术语标注助手_v3.0.html'), 'utf-8');
 const core = html.match(/\/\*CORE-START\*\/([\s\S]*?)\/\*CORE-END\*\//)[1];
 const mod = new Function(core + `
-  return { escapeHtml, buildAC, pickNonOverlap, computeWindow, matchesFilters, mergeImportedTerm, mapTemplateHeaders };
+  return { escapeHtml, buildAC, buildACAsync, pickNonOverlap, computeVirtual, matchesFilters, mergeImportedTerm, mapTemplateHeaders };
 `)();
 
 const results = [];
@@ -46,14 +46,35 @@ check('escapeHtml', mod.escapeHtml('<a b="c">&') === '&lt;a b=&quot;c&quot;&gt;&
   check(`30k-term build <3s (${buildMs}ms) + 50-row scan <200ms (${scanMs}ms)`, buildMs < 3000 && scanMs < 200);
 }
 
-// computeWindow
+// computeVirtual (window + scroll-height compression)
 {
-  const w = mod.computeWindow(8400, 700, 100000, 84, 8);
-  check('window start has buffer', w.start === 100 - 8);
-  check('window end covers view+buffer', w.end === Math.ceil((8400 + 700) / 84) + 8);
-  const w2 = mod.computeWindow(0, 700, 5, 84, 8);
-  check('window clamps to total', w2.start === 0 && w2.end === 5);
-  check('empty total', mod.computeWindow(0, 700, 0, 84, 8).end === 0);
+  const w = mod.computeVirtual(8400, 700, 100000, 84, 8, 15000000);
+  check('no-compression: classic window math holds', w.start === 92
+    && w.end === Math.ceil((8400 + 700) / 84) + 8 && w.spacerTop === 92 * 84 && w.virtH === 8400000);
+  const w2 = mod.computeVirtual(0, 700, 5, 84, 8, 15000000);
+  check('window clamps to total', w2.start === 0 && w2.end === 5 && w2.spacerTop === 0);
+  check('empty total', mod.computeVirtual(0, 700, 0, 84, 8, 15000000).end === 0);
+
+  const total = 1000000, virtH = 15000000;
+  check('virtH capped at maxVirtH', mod.computeVirtual(0, 700, total, 84, 8, virtH).virtH === virtH);
+  const bottom = mod.computeVirtual(virtH - 700, 700, total, 84, 8, virtH);
+  check('compressed: bottom reaches last row', bottom.end === total && bottom.start < total && bottom.spacerTop >= 0);
+  const mid = mod.computeVirtual((virtH - 700) / 2, 700, total, 84, 8, virtH);
+  check('compressed: midpoint lands mid-table', Math.abs(mid.start - total / 2) < total * 0.01);
+  const sb = bottom.virtH - bottom.spacerTop - (bottom.end - bottom.start) * 84;
+  check('compressed: bottom spacer non-negative-ish', sb > -84 * 2);
+}
+
+// async AC builder == sync builder
+{
+  const words = Array.from({ length: 30000 }, (_, i) => '词' + i.toString(36) + '尾' + (i % 89));
+  const sync = mod.buildAC(words);
+  const ac = await new Promise(res => mod.buildACAsync(words, res));
+  const text = '随机' + words[123] + '正文' + words[29999] + '夹' + words[5] + '杂';
+  const a = sync.search(text).matches, b = ac.search(text).matches;
+  check('async AC == sync AC (same matches)', JSON.stringify(a) === JSON.stringify(b) && a.length >= 3);
+  const stale = await new Promise(res => { mod.buildACAsync(words, () => res('done'), () => true); setTimeout(() => res('aborted'), 300); });
+  check('async AC aborts when stale', stale === 'aborted');
 }
 
 // matchesFilters
