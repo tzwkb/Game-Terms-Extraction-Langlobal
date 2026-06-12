@@ -58,7 +58,10 @@ def build_user_prompt(
     jieba_hints: list = None,
     ner_hints: dict = None,
 ) -> str:
-    fewshot = profile.get("fewshot_examples", [])
+    if bilingual:
+        fewshot = profile.get("fewshot_examples_bilingual") or profile.get("fewshot_examples", [])
+    else:
+        fewshot = profile.get("fewshot_examples", [])
     if fewshot:
         def _fmt_output(out):
             if isinstance(out, list):
@@ -143,12 +146,14 @@ def build_translation_prompt(profile, terms_with_ref: list) -> tuple:
         for t in terms_with_ref
     )
     game_type = profile.get("game_type", "游戏")
+    rules = profile.get("translation_rules", [])
+    rules_block = ("翻译风格规则（必须遵守）：\n" + "\n".join(f"- {r}" for r in rules) + "\n\n") if rules else ""
     system = f"你是一位专业的{game_type}本地化翻译专家。"
     user = f"""你是游戏本地化翻译专家。将以下中文游戏术语翻译成英文。
 
 术语库参考译文仅供参考，请以原文语境为准做出最佳翻译。
 
-严格按 JSON 格式输出，不要任何额外文字：
+{rules_block}严格按 JSON 格式输出，不要任何额外文字：
 {{"translations": [{{"term": "中文术语", "translation": "英文译文"}}, ...]}}
 
 {hints}"""
