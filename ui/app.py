@@ -28,7 +28,9 @@ from ui.ui_backend import (
     load_ckpt_meta,
 )
 
-st.set_page_config(page_title="游戏术语提取工具", page_icon="🎮", layout="wide")
+LOGO = str(ROOT / "assets" / "logo.jpeg")
+st.set_page_config(page_title="游戏术语提取工具 — Langlobal", page_icon=LOGO, layout="wide")
+st.logo(LOGO)
 
 # ═══════════════════════════════════════════════════════════
 # Session state init
