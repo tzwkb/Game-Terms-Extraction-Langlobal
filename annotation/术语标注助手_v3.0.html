@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>术语标注助手 v3.0</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f0f4f8; padding: 24px; color: #1e293b; }
+.app-header { max-width: 1700px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px; }
+.app-header h1 { font-size: 1.8rem; font-weight: 600; background: linear-gradient(135deg, #1e3c72, #2b4c8a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.badge { background: #e2e8f0; padding: 4px 12px; border-radius: 40px; font-size: 0.8rem; color: #2c3e66; }
+.app-container { max-width: 1700px; margin: 0 auto; display: flex; gap: 24px; flex-wrap: wrap; }
+.main-panel { flex: 3; min-width: 280px; background: white; border-radius: 28px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column; }
+.sidebar { flex: 1.2; min-width: 280px; background: white; border-radius: 28px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 16px; padding: 20px; height: fit-content; position: sticky; top: 20px; }
+.project-bar, .toolbar, .filter-bar { padding: 12px 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #edf2f7; }
+.project-bar { background: #f8fafd; }
+.filter-bar { background: #fafcff; }
+button { background: white; border: 1px solid #cbd5e1; padding: 8px 16px; border-radius: 40px; cursor: pointer; font-weight: 500; font-size: 0.85rem; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+button:hover { background: #f1f5f9; border-color: #94a3b8; }
+button.primary { background: #2266cc; border-color: #2266cc; color: white; }
+button.success { background: #0f7b3a; border-color: #0f7b3a; color: white; }
+button.danger { background: #dc2626; border-color: #dc2626; color: white; }
+button.warning { background: #e67e22; border-color: #e67e22; color: white; }
+select, input[type="number"], input[type="text"] { padding: 7px 12px; border-radius: 32px; border: 1px solid #cbd5e1; background: white; font-size: 0.85rem; }
+.info-bar { background: #eef3ff; padding: 12px 16px; border-radius: 24px; font-size: 0.78rem; color: #1e3a8a; line-height: 1.7; }
+kbd { background: #1e293b; color: white; padding: 1px 7px; border-radius: 20px; font-family: monospace; font-size: 11px; margin: 0 2px; }
+.table-wrapper { height: 70vh; overflow: auto; border-top: 1px solid #edf2f7; position: relative; }
+table { border-collapse: collapse; font-size: 0.85rem; width: max-content; min-width: 100%; table-layout: fixed; }
+thead th { position: sticky; top: 0; background: #f8fafd; z-index: 10; padding: 10px 12px; border-bottom: 1px solid #ecf3fa; text-align: left; vertical-align: top; }
+tbody td { padding: 8px 12px; border-bottom: 1px solid #ecf3fa; vertical-align: top; overflow: hidden; }
+tbody tr.data-row { height: 84px; }
+.cell-clip { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; line-height: 1.45; max-height: 64px; }
+.col-act { width: 44px; min-width: 44px; }
+.col-num { width: 64px; min-width: 64px; text-align: center; }
+.col-key { width: 190px; min-width: 190px; }
+.col-term { width: 330px; min-width: 330px; background-color: #fffaf0; }
+.col-trans { width: 330px; min-width: 330px; background-color: #f0fdf4; }
+.col-other { width: 180px; min-width: 180px; }
+.add-row-btn { background: #2266cc; border: none; color: white; border-radius: 14px; width: 22px; height: 22px; font-size: 12px; padding: 0; justify-content: center; }
+.add-row-btn:hover { background: #1a5bb8; }
+.hl-pending { background-color: #fef3c7; color: #b45309; border-radius: 10px; padding: 0 3px; font-weight: 500; cursor: pointer; }
+.hl-approved { background-color: #bfdbfe; color: #1e40af; border-radius: 10px; padding: 0 3px; font-weight: 500; cursor: pointer; }
+.hl-trans { background-color: #d9f99d; color: #3f6212; border-radius: 10px; padding: 0 3px; font-weight: 500; }
+.flash-row td { background-color: #d8f5d8 !important; transition: background 0.4s; }
+.term-section { display: flex; flex-direction: column; gap: 10px; }
+.term-search { width: 100%; }
+.term-list { background: #fefefe; border-radius: 20px; padding: 8px; max-height: 52vh; overflow-y: auto; border: 1px solid #edf2f7; }
+.term-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; margin-bottom: 4px; background: white; border-radius: 18px; border: 1px solid #edf2f7; cursor: pointer; }
+.term-item:hover { background: #f8fafc; border-color: #cbd5e1; }
+.term-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.term-text { font-weight: 500; word-break: break-all; }
+.tag-badge { background: #e2e8f0; color: #2c3e66; border-radius: 20px; padding: 1px 8px; font-size: 0.7rem; }
+.st-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 20px; background: #fed7aa; color: #9a3412; }
+.st-badge.ok { background: #bbf7d0; color: #166534; }
+.term-actions button { padding: 2px 5px; border: none; background: none; font-size: 0.75rem; border-radius: 10px; }
+.term-count { background: #e2e8f0; padding: 2px 10px; border-radius: 30px; font-size: 0.75rem; margin-left: 6px; }
+.jump-row { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.jump-row input { width: 84px; text-align: center; }
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+.dialog { background: white; border-radius: 30px; padding: 26px; width: 520px; max-width: 92vw; max-height: 85vh; overflow-y: auto; box-shadow: 0 25px 45px rgba(0,0,0,0.2); }
+.dialog h3 { font-size: 1.25rem; margin-bottom: 14px; }
+.dialog label { font-weight: 600; margin-top: 12px; display: block; font-size: 0.8rem; }
+.dialog input, .dialog textarea, .dialog select { width: 100%; margin-top: 4px; border-radius: 20px; padding: 9px 13px; border: 1px solid #cbd5e1; font-size: 0.9rem; }
+.dialog-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+.radio-line { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.85rem; font-weight: 400; }
+.radio-line input { width: auto; margin: 0; }
+.tag-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; border-bottom: 1px solid #edf2f7; }
+.toast { position: fixed; bottom: 22px; right: 22px; background: #2266cc; color: white; padding: 9px 18px; border-radius: 40px; z-index: 9999; font-size: 0.82rem; box-shadow: 0 6px 16px rgba(0,0,0,0.25); }
+.batch-bar { background: #eef2ff; padding: 8px 20px; display: none; align-items: center; gap: 10px; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; }
+.filter-stats { font-size: 0.75rem; color: #4b5563; }
+.col-filter { margin-top: 6px; display: flex; gap: 4px; }
+.col-filter select { padding: 3px 6px; border-radius: 16px; font-size: 0.7rem; }
+.col-filter input { flex: 1; min-width: 0; padding: 3px 8px; border-radius: 16px; font-size: 0.7rem; }
+.colvis { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.78rem; }
+.colvis label { display: flex; align-items: center; gap: 3px; }
+.pagi { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 10px; font-size: 0.78rem; flex-wrap: wrap; }
+.pagi input { width: 56px; text-align: center; padding: 3px; }
+.auto-save { background: #eef2ff; padding: 4px 12px; border-radius: 40px; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
+.auto-save input { width: 60px; }
+.footer-note { text-align: center; font-size: 0.7rem; color: #6c86a3; margin-top: 28px; }
+.filter-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-group select { padding: 4px 8px; border-radius: 20px; font-size: 0.75rem; }
+@media (max-width: 900px) { body { padding: 14px; } .sidebar { position: static; } }
+</style>
+</head>
+<body>
+<div class="app-header">
+  <h1>📖 术语标注助手 <span class="badge">v3.0 · 性能版</span></h1>
+  <span class="badge" id="capBadge">支持 10 万行 × 3 万术语</span>
+</div>
+<div class="app-container">
+  <div class="main-panel">
+    <div class="project-bar">
+      <button id="btnNew" class="warning">🆕 新建项目</button>
+      <button id="btnSave" class="success">💾 保存项目 (Ctrl+S)</button>
+      <button id="btnLoad">📂 加载项目</button>
+      <div class="auto-save"><span>⏱️ 自动备份</span><input type="number" id="autoMin" value="5" step="1" min="0"><span>分钟</span></div>
+      <span id="saveStatus" style="font-size:12px;color:#475569;"></span>
+      <div class="jump-row"><span>跳转行:</span><input type="number" id="jumpInput" min="1" placeholder="行号"><button id="btnJump">Go</button></div>
+    </div>
+    <div class="toolbar">
+      <button id="btnImportSrc" class="primary">📂 导入原文Excel</button>
+      <button id="btnImportTerms" class="primary">📋 导入术语表</button>
+      <label>🔑 Key列 <select id="selKey"></select></label>
+      <label>🎯 原文列 <select id="selTerm"></select></label>
+      <label>🌐 译文列 <select id="selTrans"></select></label>
+      <button id="btnClearTerms">🗑️ 清空术语</button>
+    </div>
+    <div class="batch-bar" id="batchBar">
+      <span>✅ 快速术语添加已开启</span>
+      <button id="btnBatchAdd" class="success">📌 确定添加 (Enter)</button>
+      <button id="btnSelAll">全选(筛选结果)</button>
+      <button id="btnSelNone">取消全选</button>
+      <span id="selCount" class="filter-stats"></span>
+      <button id="btnBatchExit" class="warning">退出 (Q)</button>
+    </div>
+    <div class="filter-bar">
+      <span style="font-size:0.8rem;">👁️ 显示列：</span>
+      <div class="colvis" id="colVis"></div>
+      <button id="btnClearFilters">🗑️ 清空筛选</button>
+      <span id="filterStats" class="filter-stats"></span>
+      <button id="btnBatchMode" style="margin-left:auto;">✅ 快速术语添加 (Q)</button>
+    </div>
+    <div class="table-wrapper" id="wrap">
+      <div style="padding:60px;text-align:center;color:#8ba0bc;">✨ 请新建项目或导入 Excel</div>
+    </div>
+  </div>
+  <div class="sidebar">
+    <div class="term-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h2 style="font-size:1.1rem;">📌 术语库 <span id="termCount" class="term-count">0</span></h2>
+        <button id="btnTags" style="padding:4px 12px;font-size:0.75rem;">🏷️ 分类标签</button>
+      </div>
+      <button id="btnExport" class="primary" style="width:100%;">📎 导出术语表 (8列模板)</button>
+      <div class="filter-group">
+        <select id="fStatus"><option value="all">全部状态</option><option value="approved">已审核</option><option value="pending">未审核</option></select>
+        <select id="fCat"><option value="all">全部分类</option><option value="uncategorized">未分类</option><option value="categorized">已分类</option></select>
+        <select id="fSort"><option value="default">默认顺序</option><option value="time_desc">修订时间 ↓</option><option value="time_asc">修订时间 ↑</option></select>
+      </div>
+      <input type="text" id="termSearch" class="term-search" placeholder="🔍 搜索术语原文或译文..." autocomplete="off">
+      <div id="termList" class="term-list"><div style="color:#94a3b8;text-align:center;">暂无术语</div></div>
+    </div>
+    <div class="info-bar">
+      <strong>💡 高效指南</strong><br>
+      • <kbd>A</kbd> 添加选中文本为术语 &nbsp;• <kbd>D</kbd> 删除 &nbsp;• <kbd>E</kbd> 编辑<br>
+      • <kbd>Q</kbd> 快速添加模式（勾选行 + 回车批量加）<br>
+      • 行首「➕」一键添加整行；双击行号看整行全文<br>
+      • 单击右侧术语 → 循环跳转匹配行<br>
+      • 黄色=未审核 蓝色=已审核 绿色=译文命中<br>
+      • Key/原文/译文列支持进阶筛选；崩溃自动恢复草稿（仅术语，原文需重新导入）
+    </div>
+  </div>
+</div>
+<div class="footer-note">术语标注助手 v3.0 —— 虚拟滚动 · AC自动机高亮 · 倒排索引 · 后台分片建库</div>
+
+<script>
+/*CORE-START*/
+'use strict';
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : m === '>' ? '&gt;' : '&quot;');
+}
+
+function buildAC(words) {
+  if (!words || !words.length) return null;
+  const nodes = [{ next: Object.create(null), fail: 0, out: null }];
+  for (const w of words) {
+    if (!w) continue;
+    let cur = 0;
+    for (const ch of w) {
+      let nxt = nodes[cur].next[ch];
+      if (nxt === undefined) {
+        nxt = nodes.length;
+        nodes.push({ next: Object.create(null), fail: 0, out: null });
+        nodes[cur].next[ch] = nxt;
+      }
+      cur = nxt;
+    }
+    if (!nodes[cur].out) nodes[cur].out = [];
+    if (!nodes[cur].out.includes(w.length)) nodes[cur].out.push(w.length);
+  }
+  const queue = [];
+  for (const ch in nodes[0].next) { const v = nodes[0].next[ch]; nodes[v].fail = 0; queue.push(v); }
+  let qi = 0;
+  while (qi < queue.length) {
+    const u = queue[qi++];
+    for (const ch in nodes[u].next) {
+      const v = nodes[u].next[ch];
+      let f = nodes[u].fail;
+      while (f && nodes[f].next[ch] === undefined) f = nodes[f].fail;
+      nodes[v].fail = nodes[f].next[ch] !== undefined && nodes[f].next[ch] !== v ? nodes[f].next[ch] : 0;
+      const fo = nodes[nodes[v].fail].out;
+      if (fo) { if (!nodes[v].out) nodes[v].out = []; for (const l of fo) if (!nodes[v].out.includes(l)) nodes[v].out.push(l); }
+      queue.push(v);
+    }
+  }
+  return {
+    search(text) {
+      const matches = [];
+      let state = 0;
+      const chars = Array.from(text);
+      for (let i = 0; i < chars.length; i++) {
+        const ch = chars[i];
+        while (state && nodes[state].next[ch] === undefined) state = nodes[state].fail;
+        state = nodes[state].next[ch] !== undefined ? nodes[state].next[ch] : 0;
+        const out = nodes[state].out;
+        if (out) for (const len of out) matches.push({ start: i - len + 1, end: i + 1 });
+      }
+      return { matches, chars };
+    }
+  };
+}
+
+function pickNonOverlap(matches) {
+  matches.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+  const res = [];
+  let lastEnd = -1;
+  for (const m of matches) { if (m.start >= lastEnd) { res.push(m); lastEnd = m.end; } }
+  return res;
+}
+
+function computeWindow(scrollTop, viewH, total, rowH, buffer) {
+  if (total <= 0) return { start: 0, end: 0 };
+  const start = Math.max(0, Math.floor(scrollTop / rowH) - buffer);
+  const end = Math.min(total, Math.ceil((scrollTop + viewH) / rowH) + buffer);
+  return { start, end };
+}
+
+function matchesFilters(row, filters) {
+  for (const k in filters) {
+    const idx = +k, f = filters[k];
+    const v = String(row[idx] ?? '');
+    if (f.type === 'contains') { if (!v.toLowerCase().includes(f.value.toLowerCase())) return false; }
+    else if (f.type === 'not_contains') { if (v.toLowerCase().includes(f.value.toLowerCase())) return false; }
+    else if (f.type === 'equals') { if (v !== f.value) return false; }
+    else if (f.type === 'empty') { if (v.trim() !== '') return false; }
+    else if (f.type === 'not_empty') { if (v.trim() === '') return false; }
+  }
+  return true;
+}
+
+function mergeImportedTerm(existing, incoming, mode) {
+  if (!existing) return { action: 'add', value: incoming };
+  if (mode === 'skip') return { action: 'skip', value: existing };
+  if (mode === 'overwrite') return { action: 'update', value: { ...incoming, order: existing.order } };
+  const filled = { ...existing };
+  let changed = false;
+  for (const k of ['category', 'translation', 'note', 'sourceKey', 'sourceText']) {
+    if ((!filled[k] || !String(filled[k]).trim()) && incoming[k] && String(incoming[k]).trim()) { filled[k] = incoming[k]; changed = true; }
+  }
+  if (changed) filled.lastModified = incoming.lastModified || filled.lastModified;
+  return { action: changed ? 'update' : 'skip', value: filled };
+}
+
+const TEMPLATE_ALIASES = {
+  key: ['Key值', 'ukey', 'Key', 'key'],
+  category: ['术语分类', '分类', '分类标签'],
+  term: ['术语原文'],
+  translation: ['术语译文', '译文'],
+  note: ['备注'],
+  source: ['来源原文'],
+  status: ['审核状态'],
+  time: ['最新修订时间', '修订时间'],
+};
+function mapTemplateHeaders(headerRow) {
+  const norm = headerRow.map(h => String(h ?? '').trim());
+  const out = {};
+  for (const field in TEMPLATE_ALIASES) {
+    out[field] = -1;
+    for (const alias of TEMPLATE_ALIASES[field]) { const i = norm.indexOf(alias); if (i !== -1) { out[field] = i; break; } }
+  }
+  return out;
+}
+/*CORE-END*/
+
+// ───────────────────────── State ─────────────────────────
+const ROW_H = 84, BUFFER = 8, TERMS_PER_PAGE = 100;
+const S = {
+  headers: [], rows: [],
+  keyCol: -1, termCol: 2, transCol: -1,
+  visibleCols: [], columnFilters: {},
+  termDetails: new Map(), categoryTags: new Set(), nextOrder: 0,
+  visIds: [], visPos: new Map(),
+  termIndex: new Map(), jumpPtr: new Map(),
+  acTerms: null, acTrans: null, transSet: new Set(),
+  batchMode: false, selection: new Set(), lastChecked: null,
+  termPage: 1, termSearch: '', fStatus: 'all', fCat: 'all', fSort: 'default',
+  flashId: null, dirty: false,
+};
+let lastWin = { start: -1, end: -1, ver: -1 }, ver = 0;
+function bump() { ver++; S.dirty = true; }
+
+// ───────────────────────── DOM ─────────────────────────
+const $ = id => document.getElementById(id);
+const wrap = $('wrap');
+let tbodyEl = null, theadEl = null;
+
+function toast(msg, ms = 2200) {
+  let t = document.querySelector('.toast');
+  if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  clearTimeout(t._tm);
+  if (ms > 0) t._tm = setTimeout(() => t.remove(), ms);
+}
+
+// ───────────────────── AC / index (debounced, chunked) ─────────────────────
+let acTimer = null, transTimer = null, indexJob = null;
+
+function scheduleAC() {
+  clearTimeout(acTimer);
+  acTimer = setTimeout(() => { S.acTerms = buildAC([...S.termDetails.keys()]); scheduleRender(true); }, 300);
+}
+function scheduleTransAC() {
+  clearTimeout(transTimer);
+  transTimer = setTimeout(() => {
+    S.transSet = new Set();
+    for (const info of S.termDetails.values()) { const t = (info.translation || '').trim(); if (t) S.transSet.add(t); }
+    S.acTrans = buildAC([...S.transSet]);
+    scheduleRender(true);
+  }, 300);
+}
+function rebuildIndexFull(onDone) {
+  if (indexJob) { cancelAnimationFrame(indexJob.raf); clearTimeout(indexJob.tm); }
+  S.termIndex = new Map();
+  if (!S.rows.length || S.termCol < 0 || !S.termDetails.size) { onDone && onDone(); return; }
+  const ac = buildAC([...S.termDetails.keys()]);
+  const CHUNK = 3000;
+  let i = 0;
+  const job = { tm: 0, raf: 0 };
+  indexJob = job;
+  function step() {
+    if (indexJob !== job) return;
+    const lim = Math.min(S.rows.length, i + CHUNK);
+    for (; i < lim; i++) {
+      const text = String(S.rows[i][S.termCol] ?? '');
+      if (!text) continue;
+      const { matches, chars } = ac.search(text);
+      if (!matches.length) continue;
+      const seen = new Set();
+      for (const m of matches) {
+        const term = chars.slice(m.start, m.end).join('');
+        if (seen.has(term)) continue;
+        seen.add(term);
+        let arr = S.termIndex.get(term);
+        if (!arr) { arr = []; S.termIndex.set(term, arr); }
+        arr.push(i);
+      }
+    }
+    if (i < S.rows.length) {
+      toast(`建立索引… ${Math.round(i / S.rows.length * 100)}%`, 0);
+      job.tm = setTimeout(step, 0);
+    } else {
+      indexJob = null;
+      toast('索引就绪 ✓');
+      onDone && onDone();
+    }
+  }
+  step();
+}
+function indexAddTerm(term) {
+  if (!S.rows.length || S.termCol < 0) return;
+  const ids = [];
+  for (let i = 0; i < S.rows.length; i++) {
+    const t = S.rows[i][S.termCol];
+    if (t && String(t).includes(term)) ids.push(i);
+  }
+  if (ids.length) S.termIndex.set(term, ids); else S.termIndex.delete(term);
+}
+function termRows(term) {
+  if (!S.termIndex.has(term) && S.rows.length && S.termCol >= 0) indexAddTerm(term);
+  return S.termIndex.get(term) || [];
+}
+function firstSource(term) {
+  const ids = termRows(term);
+  if (!ids.length) return { sourceKey: '', sourceText: '' };
+  const row = S.rows[ids[0]];
+  return {
+    sourceKey: S.keyCol >= 0 ? String(row[S.keyCol] ?? '') : '',
+    sourceText: String(row[S.termCol] ?? ''),
+  };
+}
+
+// ───────────────────── Visible rows (filters) ─────────────────────
+function recomputeVis() {
+  const ids = [];
+  const hasF = Object.keys(S.columnFilters).length > 0;
+  for (let i = 0; i < S.rows.length; i++) {
+    const row = S.rows[i];
+    if (S.termCol >= 0) { const c = row[S.termCol]; if (c === undefined || c === null || String(c).trim() === '') continue; }
+    if (hasF && !matchesFilters(row, S.columnFilters)) continue;
+    ids.push(i);
+  }
+  S.visIds = ids;
+  S.visPos = new Map();
+  for (let p = 0; p < ids.length; p++) S.visPos.set(ids[p], p);
+  $('filterStats').textContent = S.headers.length ? `(显示 ${ids.length} / ${S.rows.length} 行)` : '';
+  bump();
+}
+
+// ───────────────────── Rendering (virtual) ─────────────────────
+function highlightTerm(text) {
+  if (!S.acTerms) return escapeHtml(text);
+  const { matches, chars } = S.acTerms.search(text);
+  if (!matches.length) return escapeHtml(text);
+  const picked = pickNonOverlap(matches);
+  let html = '', pos = 0;
+  for (const m of picked) {
+    html += escapeHtml(chars.slice(pos, m.start).join(''));
+    const term = chars.slice(m.start, m.end).join('');
+    const ok = S.termDetails.get(term)?.reviewStatus === 'approved';
+    html += `<span class="${ok ? 'hl-approved' : 'hl-pending'}" data-term="${escapeHtml(term)}">${escapeHtml(term)}</span>`;
+    pos = m.end;
+  }
+  html += escapeHtml(chars.slice(pos).join(''));
+  return html;
+}
+function highlightTrans(text) {
+  if (!S.acTrans) return escapeHtml(text);
+  const { matches, chars } = S.acTrans.search(text);
+  if (!matches.length) return escapeHtml(text);
+  const picked = pickNonOverlap(matches);
+  let html = '', pos = 0;
+  for (const m of picked) {
+    html += escapeHtml(chars.slice(pos, m.start).join(''));
+    html += `<span class="hl-trans">${escapeHtml(chars.slice(m.start, m.end).join(''))}</span>`;
+    pos = m.end;
+  }
+  html += escapeHtml(chars.slice(pos).join(''));
+  return html;
+}
+function colClass(c) {
+  if (c === S.keyCol) return 'col-key';
+  if (c === S.termCol) return 'col-term';
+  if (c === S.transCol) return 'col-trans';
+  return 'col-other';
+}
+function colLetter(i) { return i < 26 ? String.fromCharCode(65 + i) : String.fromCharCode(64 + Math.floor(i / 26)) + String.fromCharCode(65 + i % 26); }
+
+function renderHeader() {
+  if (!S.headers.length) { wrap.innerHTML = '<div style="padding:60px;text-align:center;color:#8ba0bc;">✨ 请新建项目或导入 Excel</div>'; tbodyEl = null; return; }
+  const cols = S.visibleCols.length ? S.visibleCols : S.headers.map((_, i) => i);
+  let h = '<thead><tr>';
+  h += `<th class="col-act" style="text-align:center;">${S.batchMode ? '✅' : '➕'}</th><th class="col-num">#</th>`;
+  for (const c of cols) {
+    h += `<th class="${colClass(c)}"><div>${colLetter(c)} (${escapeHtml(S.headers[c]) || colLetter(c)})</div>`;
+    if (c === S.keyCol || c === S.termCol || c === S.transCol) {
+      const f = S.columnFilters[c] || { type: 'contains', value: '' };
+      const opts = c === S.transCol ? ['contains', 'not_contains', 'equals', 'empty', 'not_empty'] : ['contains', 'not_contains', 'equals'];
+      const lbl = { contains: '包含', not_contains: '不包含', equals: '等于', empty: '为空', not_empty: '不为空' };
+      h += `<div class="col-filter" data-col="${c}"><select class="cf-type" data-col="${c}">`;
+      for (const o of opts) h += `<option value="${o}" ${f.type === o ? 'selected' : ''}>${lbl[o]}</option>`;
+      h += `</select><input type="text" class="cf-val" data-col="${c}" placeholder="筛选..." value="${escapeHtml(f.value || '')}" autocomplete="off"></div>`;
+    }
+    h += '</th>';
+  }
+  h += '</tr></thead><tbody></tbody>';
+  wrap.innerHTML = `<table>${h}</table>`;
+  theadEl = wrap.querySelector('thead');
+  tbodyEl = wrap.querySelector('tbody');
+  bindHeaderEvents();
+  lastWin = { start: -1, end: -1, ver: -1 };
+  renderWindow();
+}
+
+function rowHTML(id, pos) {
+  const row = S.rows[id];
+  const cols = S.visibleCols.length ? S.visibleCols : S.headers.map((_, i) => i);
+  let h = `<tr class="data-row${S.flashId === id ? ' flash-row' : ''}" data-id="${id}">`;
+  h += S.batchMode
+    ? `<td class="col-act" style="text-align:center;"><input type="checkbox" class="row-sel" data-id="${id}" ${S.selection.has(id) ? 'checked' : ''}></td>`
+    : `<td class="col-act" style="text-align:center;"><button class="add-row-btn" data-id="${id}" title="添加整行为术语">➕</button></td>`;
+  h += `<td class="col-num row-num" data-id="${id}" title="双击查看整行全文">${id + 1}</td>`;
+  for (const c of cols) {
+    const v = String(row[c] ?? '');
+    if (c === S.termCol) h += `<td class="${colClass(c)} term-cell" data-id="${id}"><div class="cell-clip">${highlightTerm(v)}</div></td>`;
+    else if (c === S.transCol) h += `<td class="${colClass(c)}"><div class="cell-clip">${highlightTrans(v)}</div></td>`;
+    else h += `<td class="${colClass(c)}"><div class="cell-clip">${escapeHtml(v)}</div></td>`;
+  }
+  return h + '</tr>';
+}
+
+let renderQueued = false;
+function scheduleRender(force) {
+  if (force) lastWin.ver = -1;
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; renderWindow(); });
+}
+function renderWindow() {
+  if (!tbodyEl) return;
+  const total = S.visIds.length;
+  const { start, end } = computeWindow(wrap.scrollTop, wrap.clientHeight, total, ROW_H, BUFFER);
+  if (start === lastWin.start && end === lastWin.end && ver === lastWin.ver) return;
+  lastWin = { start, end, ver };
+  let h = `<tr style="height:${start * ROW_H}px;"><td colspan="99" style="padding:0;border:0;"></td></tr>`;
+  for (let p = start; p < end; p++) h += rowHTML(S.visIds[p], p);
+  h += `<tr style="height:${Math.max(0, (total - end)) * ROW_H}px;"><td colspan="99" style="padding:0;border:0;"></td></tr>`;
+  tbodyEl.innerHTML = total ? h : '<tr><td colspan="99" style="text-align:center;padding:30px;color:#94a3b8;">暂无数据（检查筛选条件）</td></tr>';
+}
+wrap.addEventListener('scroll', () => scheduleRender(false));
+
+function scrollToRow(id, flash = true) {
+  const pos = S.visPos.get(id);
+  if (pos === undefined) { toast('该行被当前筛选条件隐藏'); return; }
+  wrap.scrollTop = Math.max(0, pos * ROW_H - wrap.clientHeight / 2 + ROW_H / 2);
+  if (flash) {
+    S.flashId = id;
+    scheduleRender(true);
+    setTimeout(() => { S.flashId = null; scheduleRender(true); }, 1400);
+  }
+}
+
+// ───────────────────── Column selects / visibility ─────────────────────
+function renderColSelects() {
+  const fill = (sel, cur, allowNone) => {
+    sel.innerHTML = allowNone ? '<option value="-1">(未设置)</option>' : '';
+    S.headers.forEach((hd, i) => {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = `${colLetter(i)} - ${hd || '无标题'}`;
+      if (i === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+    if (allowNone && cur < 0) sel.value = '-1';
+  };
+  fill($('selKey'), S.keyCol, true);
+  fill($('selTerm'), S.termCol, false);
+  fill($('selTrans'), S.transCol, true);
+}
+function renderColVis() {
+  const box = $('colVis');
+  box.innerHTML = '';
+  if (!S.headers.length) return;
+  const all = document.createElement('label');
+  const allChecked = S.visibleCols.length === S.headers.length || S.visibleCols.length === 0;
+  all.innerHTML = `<input type="checkbox" id="cvAll" ${allChecked ? 'checked' : ''}> 全选`;
+  box.appendChild(all);
+  S.headers.forEach((_, i) => {
+    const lb = document.createElement('label');
+    const on = !S.visibleCols.length || S.visibleCols.includes(i);
+    lb.innerHTML = `<input type="checkbox" class="cv" value="${i}" ${on ? 'checked' : ''}> ${colLetter(i)}列`;
+    box.appendChild(lb);
+  });
+  box.querySelectorAll('.cv').forEach(cb => cb.addEventListener('change', () => {
+    const on = [...box.querySelectorAll('.cv')].filter(c => c.checked).map(c => +c.value);
+    S.visibleCols = on.length === S.headers.length ? [] : on;
+    renderHeader();
+  }));
+  box.querySelector('#cvAll').addEventListener('change', e => {
+    S.visibleCols = [];
+    if (!e.target.checked) S.visibleCols = [S.termCol >= 0 ? S.termCol : 0];
+    renderColVis();
+    renderHeader();
+  });
+}
+function bindHeaderEvents() {
+  theadEl.querySelectorAll('.cf-type').forEach(s => s.addEventListener('change', onFilterChange));
+  theadEl.querySelectorAll('.cf-val').forEach(inp => {
+    inp.addEventListener('input', debounce(onFilterChange, 200));
+    inp.addEventListener('compositionend', onFilterChange);
+  });
+}
+function debounce(fn, ms) { let tm; return function (...a) { clearTimeout(tm); tm = setTimeout(() => fn.apply(this, a), ms); }; }
+function onFilterChange(e) {
+  const box = e.target.closest('.col-filter');
+  const c = +box.dataset.col;
+  const type = box.querySelector('.cf-type').value;
+  const value = box.querySelector('.cf-val').value;
+  if (value === '' && type !== 'empty' && type !== 'not_empty') delete S.columnFilters[c];
+  else S.columnFilters[c] = { type, value };
+  recomputeVis();
+  scheduleRender(true);
+}
+
+// ───────────────────── Term ops ─────────────────────
+function nowISO() { return new Date().toISOString().slice(0, 19); }
+function termChanged({ ac = true, trans = false, list = true, index = null } = {}) {
+  if (ac) scheduleAC();
+  if (trans) scheduleTransAC();
+  if (index) { if (index.add) indexAddTerm(index.add); if (index.del) S.termIndex.delete(index.del); }
+  bump();
+  if (list) renderTermList();
+  $('termCount').textContent = S.termDetails.size;
+  scheduleRender(true);
+}
+function addTerm(term, fields = {}, { silent = false } = {}) {
+  term = (term || '').trim();
+  if (!term) return false;
+  if (S.termDetails.has(term)) { if (!silent) toast(`「${term}」已在术语库`); return false; }
+  const cat = (fields.category || '').trim();
+  if (cat) S.categoryTags.add(cat);
+  S.termDetails.set(term, {
+    category: cat, note: fields.note || '', translation: fields.translation || '',
+    sourceKey: fields.sourceKey || '', sourceText: fields.sourceText || '',
+    reviewStatus: fields.reviewStatus || 'pending',
+    lastModified: fields.lastModified || nowISO(), order: fields.order ?? S.nextOrder++,
+  });
+  return true;
+}
+function deleteTerm(term) {
+  if (!S.termDetails.delete(term)) return;
+  termChanged({ trans: true, index: { del: term } });
+}
+function toggleStatus(term) {
+  const info = S.termDetails.get(term);
+  if (!info) return;
+  info.reviewStatus = info.reviewStatus === 'approved' ? 'pending' : 'approved';
+  info.lastModified = nowISO();
+  termChanged({ ac: true });
+}
+function addFromRow(id, category) {
+  const text = String(S.rows[id][S.termCol] ?? '').trim();
+  if (!text) { toast('该行原文为空'); return; }
+  const f = {
+    category: category || '',
+    translation: S.transCol >= 0 ? String(S.rows[id][S.transCol] ?? '').trim() : '',
+    sourceKey: S.keyCol >= 0 ? String(S.rows[id][S.keyCol] ?? '') : '',
+    sourceText: text,
+  };
+  if (addTerm(text, f)) { termChanged({ trans: true, index: { add: text } }); toast(`已添加「${text.length > 20 ? text.slice(0, 20) + '…' : text}」`); }
+  else toast(`「${text.slice(0, 20)}」已存在`);
+}
+
+// ───────────────────── Term sidebar list ─────────────────────
+function renderTermList() {
+  const box = $('termList');
+  $('termCount').textContent = S.termDetails.size;
+  if (!S.termDetails.size) { box.innerHTML = '<div style="color:#94a3b8;text-align:center;">暂无术语，按 A 或点 ➕ 添加</div>'; return; }
+  const cats = new Set();
+  for (const info of S.termDetails.values()) if (info.category) cats.add(info.category);
+  const fc = $('fCat');
+  const cur = S.fCat;
+  fc.innerHTML = '<option value="all">全部分类</option><option value="uncategorized">未分类</option><option value="categorized">已分类</option>'
+    + [...cats].sort().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  fc.value = [...fc.options].some(o => o.value === cur) ? cur : 'all';
+  S.fCat = fc.value;
+
+  let terms = [...S.termDetails.keys()];
+  const kw = S.termSearch.trim().toLowerCase();
+  if (kw) terms = terms.filter(t => t.toLowerCase().includes(kw) || (S.termDetails.get(t).translation || '').toLowerCase().includes(kw));
+  if (S.fStatus !== 'all') terms = terms.filter(t => S.termDetails.get(t).reviewStatus === S.fStatus);
+  if (S.fCat === 'uncategorized') terms = terms.filter(t => !S.termDetails.get(t).category);
+  else if (S.fCat === 'categorized') terms = terms.filter(t => S.termDetails.get(t).category);
+  else if (S.fCat !== 'all') terms = terms.filter(t => S.termDetails.get(t).category === S.fCat);
+  if (S.fSort === 'default') terms.sort((a, b) => (S.termDetails.get(a).order || 0) - (S.termDetails.get(b).order || 0));
+  else if (S.fSort === 'time_desc') terms.sort((a, b) => String(S.termDetails.get(b).lastModified).localeCompare(String(S.termDetails.get(a).lastModified)));
+  else terms.sort((a, b) => String(S.termDetails.get(a).lastModified).localeCompare(String(S.termDetails.get(b).lastModified)));
+
+  const pages = Math.max(1, Math.ceil(terms.length / TERMS_PER_PAGE));
+  if (S.termPage > pages) S.termPage = pages;
+  const slice = terms.slice((S.termPage - 1) * TERMS_PER_PAGE, S.termPage * TERMS_PER_PAGE);
+  let h = '';
+  for (const t of slice) {
+    const info = S.termDetails.get(t);
+    h += `<div class="term-item" data-term="${escapeHtml(t)}">
+      <div class="term-info"><span class="term-text">${escapeHtml(t)}${info.translation ? ` <span style="color:#64748b;font-weight:400;">(${escapeHtml(info.translation)})</span>` : ''}</span>
+      ${info.category ? `<span class="tag-badge">${escapeHtml(info.category)}</span>` : ''}
+      <span class="st-badge ${info.reviewStatus === 'approved' ? 'ok' : ''}">${info.reviewStatus === 'approved' ? '已审核' : '未审核'}</span></div>
+      <div class="term-actions">
+        <button class="t-st" data-term="${escapeHtml(t)}" title="切换审核状态">✓</button>
+        <button class="t-ed" data-term="${escapeHtml(t)}" title="编辑">✏️</button>
+        <button class="t-rm" data-term="${escapeHtml(t)}" title="删除">❌</button>
+      </div></div>`;
+  }
+  h += pages > 1
+    ? `<div class="pagi"><button id="tpPrev" ${S.termPage === 1 ? 'disabled' : ''}>上一页</button><span>第</span><input type="number" id="tpInput" value="${S.termPage}" min="1" max="${pages}"><span>/ ${pages} 页（共 ${terms.length} 条）</span><button id="tpGo">跳转</button><button id="tpNext" ${S.termPage === pages ? 'disabled' : ''}>下一页</button></div>`
+    : `<div class="pagi" style="justify-content:flex-end;">共 ${terms.length} 条</div>`;
+  box.innerHTML = h;
+  box.querySelectorAll('.t-st').forEach(b => b.onclick = e => { e.stopPropagation(); toggleStatus(b.dataset.term); });
+  box.querySelectorAll('.t-ed').forEach(b => b.onclick = e => { e.stopPropagation(); showEditDialog(b.dataset.term); });
+  box.querySelectorAll('.t-rm').forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm(`删除术语「${b.dataset.term}」？`)) deleteTerm(b.dataset.term); });
+  box.querySelectorAll('.term-item').forEach(it => it.onclick = () => jumpTerm(it.dataset.term));
+  const prev = $('tpPrev'), next = $('tpNext'), go = $('tpGo');
+  if (prev) prev.onclick = () => { S.termPage--; renderTermList(); };
+  if (next) next.onclick = () => { S.termPage++; renderTermList(); };
+  if (go) go.onclick = () => { S.termPage = Math.min(pages, Math.max(1, +$('tpInput').value || 1)); renderTermList(); };
+}
+function jumpTerm(term) {
+  const ids = termRows(term);
+  if (!ids.length) { toast(`原文中未找到「${term}」`); return; }
+  const p = S.jumpPtr.get(term) || 0;
+  scrollToRow(ids[p % ids.length]);
+  S.jumpPtr.set(term, (p + 1) % ids.length);
+}
+
+// ───────────────────── Dialogs ─────────────────────
+let activeDialog = null;
+function dialog(html) {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.innerHTML = `<div class="dialog">${html}</div>`;
+  document.body.appendChild(ov);
+  activeDialog = ov;
+  const close = () => { ov.remove(); if (activeDialog === ov) activeDialog = null; };
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  return { ov, close };
+}
+function catDatalist(idSuffix) {
+  const id = `dl-${idSuffix}`;
+  return { id, html: `<datalist id="${id}">${[...S.categoryTags].sort().map(t => `<option value="${escapeHtml(t)}">`).join('')}</datalist>` };
+}
+function showEditDialog(term) {
+  if (activeDialog) return;
+  const info = S.termDetails.get(term);
+  if (!info) return;
+  const dl = catDatalist('edit');
+  const { ov, close } = dialog(`<h3>✏️ 编辑术语</h3>
+    <label>术语原文</label><input id="edTerm" value="${escapeHtml(term)}">
+    <label>分类</label><input id="edCat" list="${dl.id}" value="${escapeHtml(info.category)}" placeholder="选择或输入新分类" autocomplete="off">${dl.html}
+    <label>译文</label><input id="edTrans" value="${escapeHtml(info.translation)}">
+    <label>备注</label><textarea id="edNote" rows="2">${escapeHtml(info.note)}</textarea>
+    <div class="dialog-buttons"><button id="edDel" class="danger">删除</button><button id="edSave" class="success">保存</button><button id="edCancel">取消</button></div>`);
+  ov.querySelector('#edCancel').onclick = close;
+  ov.querySelector('#edDel').onclick = () => { if (confirm('永久删除？')) { deleteTerm(term); close(); } };
+  ov.querySelector('#edSave').onclick = () => {
+    const nt = ov.querySelector('#edTerm').value.trim();
+    if (!nt) { toast('术语不能为空'); return; }
+    if (nt !== term && S.termDetails.has(nt)) { toast(`「${nt}」已存在`); return; }
+    const cat = ov.querySelector('#edCat').value.trim();
+    if (cat) S.categoryTags.add(cat);
+    S.termDetails.delete(term);
+    S.termDetails.set(nt, { ...info, category: cat, translation: ov.querySelector('#edTrans').value.trim(), note: ov.querySelector('#edNote').value, lastModified: nowISO() });
+    termChanged({ trans: true, index: { del: term, add: nt } });
+    close();
+    jumpTerm(nt);
+  };
+}
+function showTagManager() {
+  if (activeDialog) return;
+  const render = (ov) => {
+    ov.querySelector('.dialog').innerHTML = `<h3>🏷️ 分类标签管理</h3>
+      <div style="max-height:300px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:18px;">
+      ${[...S.categoryTags].sort().map(t => `<div class="tag-row"><span>${escapeHtml(t)}</span><span>
+        <button class="tg-ed" data-tag="${escapeHtml(t)}" style="border:none;">✏️</button>
+        <button class="tg-rm" data-tag="${escapeHtml(t)}" style="border:none;">❌</button></span></div>`).join('') || '<div style="padding:14px;color:#94a3b8;">暂无标签</div>'}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;"><input id="tgNew" placeholder="新分类名称" style="flex:1;" autocomplete="off"><button id="tgAdd" class="success">添加</button></div>
+      <div class="dialog-buttons"><button id="tgClose">关闭</button></div>`;
+    ov.querySelector('#tgClose').onclick = () => { ov.remove(); activeDialog = null; renderTermList(); };
+    ov.querySelector('#tgAdd').onclick = () => {
+      const v = ov.querySelector('#tgNew').value.trim();
+      if (v && !S.categoryTags.has(v)) { S.categoryTags.add(v); bump(); render(ov); }
+      else if (v) toast('标签已存在');
+    };
+    ov.querySelectorAll('.tg-ed').forEach(b => b.onclick = () => {
+      const old = b.dataset.tag;
+      const nv = prompt('修改分类名称', old);
+      if (nv && nv.trim() && nv !== old) {
+        S.categoryTags.delete(old); S.categoryTags.add(nv.trim());
+        for (const info of S.termDetails.values()) if (info.category === old) info.category = nv.trim();
+        bump(); render(ov);
+      }
+    });
+    ov.querySelectorAll('.tg-rm').forEach(b => b.onclick = () => {
+      const tag = b.dataset.tag;
+      if (!confirm(`删除分类「${tag}」？所有术语中的此分类将被清空`)) return;
+      S.categoryTags.delete(tag);
+      for (const info of S.termDetails.values()) if (info.category === tag) info.category = '';
+      bump(); render(ov);
+    });
+  };
+  const { ov } = dialog('');
+  render(ov);
+}
+function showRowDetail(id) {
+  if (activeDialog) return;
+  const row = S.rows[id];
+  let h = `<h3>第 ${id + 1} 行 全文</h3>`;
+  S.headers.forEach((hd, c) => {
+    h += `<label>${colLetter(c)} (${escapeHtml(hd)})</label><div style="background:#f8fafc;border-radius:14px;padding:10px 13px;margin-top:4px;font-size:0.85rem;word-break:break-word;white-space:pre-wrap;">${c === S.termCol ? highlightTerm(String(row[c] ?? '')) : escapeHtml(String(row[c] ?? ''))}</div>`;
+  });
+  h += `<div class="dialog-buttons"><button id="rdClose">关闭</button></div>`;
+  const { ov, close } = dialog(h);
+  ov.querySelector('#rdClose').onclick = close;
+}
+
+// ───────────────────── Batch mode ─────────────────────
+function setBatchMode(on) {
+  S.batchMode = on;
+  S.selection.clear();
+  S.lastChecked = null;
+  $('batchBar').style.display = on ? 'flex' : 'none';
+  $('btnBatchMode').textContent = on ? '✅ 快速添加已开启 (Q)' : '✅ 快速术语添加 (Q)';
+  updateSelCount();
+  renderHeader();
+}
+function updateSelCount() { $('selCount').textContent = S.batchMode ? `已勾选 ${S.selection.size} 行` : ''; }
+function batchAddDialog() {
+  if (!S.selection.size) { toast('请先勾选行'); return; }
+  if (activeDialog) return;
+  const dl = catDatalist('batch');
+  const { ov, close } = dialog(`<h3>📌 批量添加 ${S.selection.size} 行</h3>
+    <label class="radio-line"><input type="checkbox" id="bcUse"> 为该批次统一设置分类</label>
+    <div id="bcGroup" style="display:none;"><label>分类</label><input id="bcCat" list="${dl.id}" placeholder="选择或输入新分类" autocomplete="off">${dl.html}</div>
+    <div class="dialog-buttons"><button id="bcCancel">取消</button><button id="bcOk" class="success">确认添加</button></div>`);
+  ov.querySelector('#bcUse').onchange = e => ov.querySelector('#bcGroup').style.display = e.target.checked ? 'block' : 'none';
+  ov.querySelector('#bcCancel').onclick = close;
+  ov.querySelector('#bcOk').onclick = () => {
+    let cat = '';
+    if (ov.querySelector('#bcUse').checked) {
+      cat = ov.querySelector('#bcCat').value.trim();
+      if (!cat) { toast('请填写分类'); return; }
+      S.categoryTags.add(cat);
+    }
+    const addedTerms = [];
+    let skipped = 0;
+    for (const id of S.selection) {
+      const text = String(S.rows[id][S.termCol] ?? '').trim();
+      if (!text || S.termDetails.has(text)) { skipped++; continue; }
+      addTerm(text, {
+        category: cat,
+        translation: S.transCol >= 0 ? String(S.rows[id][S.transCol] ?? '').trim() : '',
+        sourceKey: S.keyCol >= 0 ? String(S.rows[id][S.keyCol] ?? '') : '',
+        sourceText: text,
+      }, { silent: true });
+      addedTerms.push(text);
+    }
+    close();
+    S.selection.clear();
+    updateSelCount();
+    if (addedTerms.length > 20) rebuildIndexFull(() => scheduleRender(true));
+    else for (const t of addedTerms) indexAddTerm(t);
+    termChanged({ trans: true });
+    toast(`添加 ${addedTerms.length} 条，跳过 ${skipped} 条${cat ? `，分类「${cat}」` : ''}`);
+  };
+}
+
+// ───────────────────── Table events (delegated) ─────────────────────
+wrap.addEventListener('click', e => {
+  const add = e.target.closest('.add-row-btn');
+  if (add) { addFromRow(+add.dataset.id); return; }
+  const cb = e.target.closest('.row-sel');
+  if (cb) {
+    const id = +cb.dataset.id;
+    if (e.shiftKey && S.lastChecked !== null) {
+      const a = S.visPos.get(S.lastChecked), b = S.visPos.get(id);
+      if (a !== undefined && b !== undefined) {
+        for (let p = Math.min(a, b); p <= Math.max(a, b); p++) S.selection.add(S.visIds[p]);
+        scheduleRender(true);
+      }
+    } else if (cb.checked) S.selection.add(id); else S.selection.delete(id);
+    S.lastChecked = id;
+    updateSelCount();
+  }
+});
+wrap.addEventListener('dblclick', e => {
+  const span = e.target.closest('.hl-pending, .hl-approved');
+  if (span) { showEditDialog(span.dataset.term); return; }
+  const num = e.target.closest('.row-num');
+  if (num) showRowDetail(+num.dataset.id);
+});
+
+// ───────────────────── Import / Export ─────────────────────
+function pickFile(accept, cb) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = accept;
+  inp.onchange = () => { if (inp.files[0]) cb(inp.files[0]); };
+  inp.click();
+}
+function readWorkbook(file, cb) {
+  toast('解析文件中…', 0);
+  const reader = new FileReader();
+  reader.onload = e => setTimeout(() => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+      cb(rows);
+    } catch (err) { toast('解析失败: ' + err.message); }
+  }, 30);
+  reader.readAsArrayBuffer(file);
+}
+function importSource(file) {
+  readWorkbook(file, rows => {
+    if (!rows.length) { toast('文件为空'); return; }
+    S.headers = rows[0].map((c, i) => c !== undefined && c !== '' ? String(c) : `列${colLetter(i)}`);
+    const n = S.headers.length;
+    const data = new Array(rows.length - 1);
+    for (let i = 1; i < rows.length; i++) {
+      const r = new Array(n);
+      for (let j = 0; j < n; j++) { const v = rows[i] ? rows[i][j] : ''; r[j] = v === null || v === undefined ? '' : String(v); }
+      data[i - 1] = r;
+    }
+    S.rows = data;
+    if (S.termCol >= n) S.termCol = Math.max(0, n - 1);
+    if (S.keyCol >= n) S.keyCol = -1;
+    if (S.transCol >= n) S.transCol = -1;
+    S.visibleCols = []; S.columnFilters = {}; S.selection.clear();
+    renderColSelects(); renderColVis(); recomputeVis(); renderHeader();
+    toast(`已导入 ${data.length} 行`);
+    rebuildIndexFull(() => scheduleRender(true));
+  });
+}
+function importTerms(file) {
+  readWorkbook(file, rows => {
+    if (!rows.length) { toast('术语表为空'); return; }
+    const map = mapTemplateHeaders(rows[0]);
+    if (map.term === -1) { toast('术语表缺少「术语原文」列'); return; }
+    if (activeDialog) return;
+    const { ov, close } = dialog(`<h3>📋 导入术语表（${rows.length - 1} 行）</h3>
+      <label>与已有术语冲突时：</label>
+      <label class="radio-line"><input type="radio" name="mMode" value="skip" checked> 跳过已有（保留本地修改）</label>
+      <label class="radio-line"><input type="radio" name="mMode" value="fill"> 仅补空白字段（推荐合并 AI 结果）</label>
+      <label class="radio-line"><input type="radio" name="mMode" value="overwrite"> 覆盖已有</label>
+      <div class="dialog-buttons"><button id="imCancel">取消</button><button id="imOk" class="success">导入</button></div>`);
+    ov.querySelector('#imCancel').onclick = close;
+    ov.querySelector('#imOk').onclick = () => {
+      const mode = ov.querySelector('input[name="mMode"]:checked').value === 'fill' ? 'fill' : ov.querySelector('input[name="mMode"]:checked').value;
+      let added = 0, updated = 0, skipped = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const g = c => c !== -1 && rows[i][c] !== undefined ? String(rows[i][c]).trim() : '';
+        const term = g(map.term);
+        if (!term) continue;
+        const incoming = {
+          category: g(map.category), translation: g(map.translation), note: g(map.note),
+          sourceKey: g(map.key), sourceText: g(map.source),
+          reviewStatus: g(map.status) === '已审核' ? 'approved' : 'pending',
+          lastModified: g(map.time) || nowISO(),
+        };
+        const existing = S.termDetails.get(term);
+        const res = mergeImportedTerm(existing, { ...incoming, order: S.nextOrder }, mode);
+        if (res.action === 'add') { addTerm(term, incoming, { silent: true }); added++; }
+        else if (res.action === 'update') { S.termDetails.set(term, res.value); updated++; }
+        else skipped++;
+        if (incoming.category) S.categoryTags.add(incoming.category);
+      }
+      close();
+      termChanged({ trans: true });
+      rebuildIndexFull(() => scheduleRender(true));
+      toast(`导入完成：新增 ${added}，更新 ${updated}，跳过 ${skipped}`);
+    };
+  });
+}
+function exportTerms() {
+  if (!S.termDetails.size) { toast('无术语可导出'); return; }
+  const out = [];
+  for (const [term, info] of S.termDetails.entries()) {
+    let { sourceKey, sourceText } = info;
+    if (!sourceKey || !sourceText) {
+      const fs = firstSource(term);
+      sourceKey = sourceKey || fs.sourceKey;
+      sourceText = sourceText || fs.sourceText;
+    }
+    out.push({
+      'Key值': sourceKey || '', '术语分类': info.category || '', '术语原文': term,
+      '术语译文': info.translation || '', '备注': info.note || '', '来源原文': sourceText || '',
+      '审核状态': info.reviewStatus === 'approved' ? '已审核' : '未审核', '最新修订时间': info.lastModified || '',
+    });
+  }
+  const ws = XLSX.utils.json_to_sheet(out);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '术语表');
+  XLSX.writeFile(wb, `术语表_${nowISO().replace(/:/g, '-')}.xlsx`);
+  toast(`已导出 ${out.length} 条`);
+}
+
+// ───────────────────── Project save/load + draft ─────────────────────
+function projectJSON() {
+  return JSON.stringify({
+    version: '3.0', timestamp: nowISO(),
+    headers: S.headers, rows: S.rows,
+    keyCol: S.keyCol, termCol: S.termCol, transCol: S.transCol,
+    visibleCols: S.visibleCols, columnFilters: S.columnFilters,
+    termDetails: [...S.termDetails.entries()], categoryTags: [...S.categoryTags], nextOrder: S.nextOrder,
+  });
+}
+function saveProject() {
+  const blob = new Blob([projectJSON()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `term_project_${nowISO().replace(/:/g, '-')}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  S.dirty = false;
+  $('saveStatus').textContent = `已保存 ${new Date().toLocaleTimeString()}`;
+  setTimeout(() => $('saveStatus').textContent = '', 3000);
+}
+function loadProjectObj(p) {
+  S.headers = p.headers || [];
+  S.rows = p.rows || p.originalRawData || [];
+  S.termDetails = new Map(p.termDetails || []);
+  S.categoryTags = new Set(p.categoryTags || []);
+  S.keyCol = p.keyCol ?? p.keyColumnIndex ?? -1;
+  S.termCol = p.termCol ?? p.termColumnIndex ?? 2;
+  S.transCol = p.transCol ?? p.translationColumnIndex ?? -1;
+  S.visibleCols = p.visibleCols || [];
+  S.columnFilters = p.columnFilters || {};
+  S.nextOrder = p.nextOrder || S.termDetails.size;
+  S.selection.clear(); S.batchMode = false; $('batchBar').style.display = 'none';
+  renderColSelects(); renderColVis(); recomputeVis(); renderHeader(); renderTermList();
+  scheduleAC(); scheduleTransAC();
+  rebuildIndexFull(() => scheduleRender(true));
+  S.dirty = false;
+}
+function loadProject(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const p = JSON.parse(e.target.result);
+      if (!p.termDetails && !p.headers) { toast('格式错误'); return; }
+      loadProjectObj(p);
+      toast('项目加载成功');
+    } catch (err) { toast('解析失败'); }
+  };
+  reader.readAsText(file);
+}
+const DRAFT_KEY = 'tba3_draft';
+function saveDraft() {
+  if (!S.dirty || !S.termDetails.size) return;
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      timestamp: nowISO(),
+      keyCol: S.keyCol, termCol: S.termCol, transCol: S.transCol,
+      termDetails: [...S.termDetails.entries()], categoryTags: [...S.categoryTags], nextOrder: S.nextOrder,
+    }));
+  } catch (e) { /* quota exceeded: draft skipped */ }
+}
+setInterval(saveDraft, 60000);
+window.addEventListener('beforeunload', saveDraft);
+function tryRestoreDraft() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) {}
+  if (!d || !d.termDetails || !d.termDetails.length) return;
+  if (!confirm(`发现 ${d.timestamp} 的术语草稿（${d.termDetails.length} 条）。恢复吗？\n（草稿只含术语库，原文请重新导入）`)) { localStorage.removeItem(DRAFT_KEY); return; }
+  S.termDetails = new Map(d.termDetails);
+  S.categoryTags = new Set(d.categoryTags || []);
+  S.nextOrder = d.nextOrder || S.termDetails.size;
+  S.keyCol = d.keyCol ?? -1; S.termCol = d.termCol ?? 2; S.transCol = d.transCol ?? -1;
+  termChanged({ trans: true });
+  toast('草稿已恢复，请导入原文 Excel');
+}
+
+// ───────────────────── Auto backup (file download) ─────────────────────
+let autoTimer = null;
+function startAuto() {
+  clearInterval(autoTimer);
+  const min = parseFloat($('autoMin').value);
+  if (!min || min <= 0) { $('saveStatus').textContent = '自动备份关闭'; return; }
+  autoTimer = setInterval(() => { if (S.termDetails.size || S.rows.length) saveProject(); }, min * 60000);
+  $('saveStatus').textContent = `⏲️ 每 ${min} 分钟自动备份`;
+}
+
+// ───────────────────── Keyboard ─────────────────────
+document.addEventListener('keydown', e => {
+  if (activeDialog) { if (e.key === 'Escape') { activeDialog.remove(); activeDialog = null; } return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); saveProject(); return; }
+  const tag = document.activeElement?.tagName;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+  if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); setBatchMode(!S.batchMode); return; }
+  if (S.batchMode && e.key === 'Enter') { e.preventDefault(); batchAddDialog(); return; }
+  const sel = window.getSelection();
+  const txt = sel.toString().trim();
+  if (!txt) return;
+  let node = sel.anchorNode;
+  while (node && node.nodeType !== 1) node = node.parentNode;
+  const td = node?.closest?.('.term-cell');
+  if (!td) return;
+  const id = +td.dataset.id;
+  if (e.key === 'a' || e.key === 'A') {
+    e.preventDefault();
+    const f = { sourceKey: S.keyCol >= 0 ? String(S.rows[id][S.keyCol] ?? '') : '', sourceText: String(S.rows[id][S.termCol] ?? '') };
+    if (addTerm(txt, f)) { termChanged({ trans: false, index: { add: txt } }); toast(`已添加「${txt}」`); }
+  } else if (e.key === 'd' || e.key === 'D') {
+    e.preventDefault();
+    if (S.termDetails.has(txt)) { if (confirm(`删除「${txt}」？`)) deleteTerm(txt); } else toast('选中文本不是术语');
+  } else if (e.key === 'e' || e.key === 'E') {
+    e.preventDefault();
+    if (S.termDetails.has(txt)) showEditDialog(txt); else toast('请先按 A 添加');
+  }
+});
+
+// ───────────────────── Wire up ─────────────────────
+$('btnNew').onclick = () => {
+  if (!confirm('清空所有数据，新建项目？')) return;
+  Object.assign(S, { headers: [], rows: [], keyCol: -1, termCol: 2, transCol: -1, visibleCols: [], columnFilters: {}, nextOrder: 0, visIds: [], termIndex: new Map(), acTerms: null, acTrans: null });
+  S.termDetails.clear(); S.categoryTags.clear(); S.selection.clear(); S.visPos = new Map();
+  localStorage.removeItem(DRAFT_KEY);
+  setBatchMode(false);
+  renderColSelects(); renderColVis(); recomputeVis(); renderHeader(); renderTermList();
+};
+$('btnSave').onclick = saveProject;
+$('btnLoad').onclick = () => pickFile('.json', loadProject);
+$('btnImportSrc').onclick = () => pickFile('.xlsx,.xls', importSource);
+$('btnImportTerms').onclick = () => pickFile('.xlsx,.xls,.csv', importTerms);
+$('btnClearTerms').onclick = () => {
+  if (!S.termDetails.size || !confirm('清空全部术语？')) return;
+  S.termDetails.clear(); S.categoryTags.clear(); S.nextOrder = 0; S.termIndex.clear();
+  S.acTerms = null; S.acTrans = null;
+  termChanged({});
+};
+$('btnExport').onclick = exportTerms;
+$('btnTags').onclick = showTagManager;
+$('btnJump').onclick = () => {
+  const n = +$('jumpInput').value;
+  if (!n || n < 1 || n > S.rows.length) { toast(`行号需在 1~${S.rows.length}`); return; }
+  scrollToRow(n - 1);
+};
+$('btnClearFilters').onclick = () => { S.columnFilters = {}; recomputeVis(); renderHeader(); };
+$('btnBatchMode').onclick = () => setBatchMode(!S.batchMode);
+$('btnBatchExit').onclick = () => setBatchMode(false);
+$('btnBatchAdd').onclick = batchAddDialog;
+$('btnSelAll').onclick = () => { S.selection = new Set(S.visIds); updateSelCount(); scheduleRender(true); };
+$('btnSelNone').onclick = () => { S.selection.clear(); updateSelCount(); scheduleRender(true); };
+$('selKey').onchange = e => { S.keyCol = +e.target.value; renderHeader(); };
+$('selTerm').onchange = e => { S.termCol = +e.target.value; recomputeVis(); renderHeader(); rebuildIndexFull(() => scheduleRender(true)); };
+$('selTrans').onchange = e => { S.transCol = +e.target.value; renderHeader(); };
+$('termSearch').addEventListener('input', debounce(() => { S.termSearch = $('termSearch').value; S.termPage = 1; renderTermList(); }, 200));
+$('fStatus').onchange = e => { S.fStatus = e.target.value; S.termPage = 1; renderTermList(); };
+$('fCat').onchange = e => { S.fCat = e.target.value; S.termPage = 1; renderTermList(); };
+$('fSort').onchange = e => { S.fSort = e.target.value; S.termPage = 1; renderTermList(); };
+$('autoMin').onchange = startAuto;
+
+startAuto();
+tryRestoreDraft();
+console.log('术语标注助手 v3.0');
+</script>
+</body>
+</html>
