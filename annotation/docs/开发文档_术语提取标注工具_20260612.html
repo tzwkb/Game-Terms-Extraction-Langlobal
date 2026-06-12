@@ -162,7 +162,7 @@ footer .f-text { font-family: var(--mono); font-size: 11px; color: var(--ink-sof
   </div>
   <div class="troika">
     <div class="def-card"><h4>父项目 · AI 提取工具</h4><p>已有 Python + Streamlit 工程，本次只升级输入输出两端，提取管线不动。</p></div>
-    <div class="def-card green"><h4>子项目 · 标注工具</h4><p>新开发。单 HTML 文件 + 原生 JavaScript，浏览器双击即用；唯一外部依赖为 Excel 解析库 SheetJS。</p></div>
+    <div class="def-card green"><h4>子项目 · 标注工具</h4><p>新开发。单 HTML 文件 + 原生 JavaScript，浏览器双击即用；Excel 解析库 SheetJS 内嵌，零外部依赖、完全离线。</p></div>
     <div class="def-card ink"><h4>契约 · 8 列模板</h4><p>两工具之间唯一接口，一张 xlsx 双向读写，互不依赖对方实现。</p></div>
   </div>
 
@@ -302,7 +302,7 @@ footer .f-text { font-family: var(--mono); font-size: 11px; color: var(--ink-sof
     <tbody>
       <tr><td class="t-key">超大词表（&gt;10 万）词典重建延迟</td><td>时间分片后台构建，界面不冻结；旧词典先行服务</td></tr>
       <tr><td class="t-key">浏览器差异</td><td>以 Chrome / Edge 为基准；滚动映射上限按最严浏览器取值</td></tr>
-      <tr><td class="t-key">SheetJS CDN 需联网</td><td>内网镜像，或后续改为内嵌（彻底离线）</td></tr>
+      <tr><td class="t-key">Excel 解析库的外部依赖</td><td>直接内嵌库源码（彻底离线，单文件约 1MB）</td></tr>
       <tr><td class="t-key">崩溃草稿受 localStorage 配额限制（约 3 万词）</td><td>超限自动降级跳过，保留手动 / 定时工程备份双保险</td></tr>
     </tbody>
   </table>
