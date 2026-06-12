@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Verify profile wiring: translation_rules injection, bilingual few-shot
-preference, and term_corrections override (offline, no API)."""
+preference, and glossary-over-EN priority with conflict note (offline, no API)."""
 
 import sys
 from pathlib import Path
@@ -9,7 +9,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from core.prompt_base import build_translation_prompt, build_user_prompt
-from core.main import _apply_term_corrections
+from core.main import match_and_translate
 
 results = []
 
@@ -23,7 +23,6 @@ PROFILE = {
     "game_type": "武侠",
     "term_categories": ["人名", "技能"],
     "translation_rules": ["角色名 → 音译（拼音）", "技能名 → 意译"],
-    "term_corrections": {"墨门": "Momen"},
     "fewshot_examples": [{"input": "单语示例输入", "output": [{"term": "示例", "category": "人名"}]}],
     "fewshot_examples_bilingual": [{"input": "ZH: 双语示例 | EN: Bilingual sample",
                                     "output": [{"zh_term": "双语示例", "eng_term": "Bilingual sample", "category": "技能"}]}],
@@ -43,17 +42,22 @@ no_bi = {k: v for k, v in PROFILE.items() if k != "fewshot_examples_bilingual"}
 check("bilingual falls back to mono few-shot when variant absent",
       "单语示例输入" in build_user_prompt(no_bi, "[1] ZH: a | EN: b", include_context=False, bilingual=True))
 
-# term_corrections override
-items = [
-    {"term": "墨门", "translation": "Mo Sect", "match_type": "llm_translated"},
-    {"term": "墨门弟子", "translation": "Disciple", "match_type": "exact"},
-    {"term": "墨门", "translation": "Momen", "match_type": "exact"},
+# glossary > bilingual copy, conflict noted
+GLOSSARY = {"墨门": ("墨门", "Momen")}
+extracted = [
+    {"term": "墨门", "eng_term": "Mo Sect", "category": "门派"},
+    {"term": "八荒剑诀", "eng_term": "Eight Wilds Sword Art", "category": "技能"},
 ]
-out = _apply_term_corrections(items, PROFILE)
-check("wrong translation overridden + marked corrected", out[0]["translation"] == "Momen" and out[0]["match_type"] == "corrected")
-check("non-listed term untouched", out[1]["translation"] == "Disciple" and out[1]["match_type"] == "exact")
-check("already-correct translation not re-marked", out[2]["match_type"] == "exact")
-check("no corrections -> passthrough", _apply_term_corrections([{"term": "x", "translation": "y"}], {"game_type": "g"})[0]["translation"] == "y")
+out = match_and_translate([dict(t) for t in extracted], GLOSSARY, PROFILE, "", "", "m", bilingual=True)
+by = {d["term"]: d for d in out}
+check("glossary wins over EN column", by["墨门"]["translation"] == "Momen" and by["墨门"]["match_type"] == "exact")
+check("conflict recorded in note", "Mo Sect" in by["墨门"].get("note", ""))
+check("no glossary hit -> EN copied", by["八荒剑诀"]["translation"] == "Eight Wilds Sword Art" and by["八荒剑诀"]["match_type"] == "bilingual")
+check("eng_term stripped from results", all("eng_term" not in d for d in out))
+out2 = match_and_translate([{"term": "墨门", "eng_term": "Momen", "category": "门派"}], GLOSSARY, PROFILE, "", "", "m", bilingual=True)
+check("EN agreeing with glossary -> no note", "note" not in out2[0])
+out3 = match_and_translate([{"term": "墨门", "category": "门派"}], GLOSSARY, PROFILE, "", "", "m", bilingual=False)
+check("mono mode exact match unchanged", out3[0]["translation"] == "Momen" and "note" not in out3[0])
 
 n = sum(results)
 print(f"\n{n}/{len(results)} passed")

@@ -60,7 +60,7 @@ def results_to_template_df(results: List[dict], timestamp: str = "") -> pd.DataF
         "术语分类": _cell(r, "category"),
         "术语原文": _cell(r, "term"),
         "术语译文": _cell(r, "translation"),
-        "备注": "",
+        "备注": _cell(r, "note"),
         "来源原文": _cell(r, "source_text"),
         "审核状态": "未审核",
         "最新修订时间": ts,
@@ -402,56 +402,35 @@ def extract_terms(texts: List[str], profile: dict, api_key: str, base_url: str, 
     return terms
 
 
-def _apply_term_corrections(items: List[dict], profile: dict) -> List[dict]:
-    corrections = profile.get("term_corrections") or {}
-    if not corrections:
-        return items
-    n = 0
-    for d in items:
-        fixed = corrections.get(d.get("term"))
-        if fixed and d.get("translation") != fixed:
-            d["translation"] = fixed
-            d["match_type"] = "corrected"
-            n += 1
-    if n:
-        logger.info(f"term_corrections applied: {n} translations overridden")
-    return items
-
-
 def match_and_translate(extracted: List[dict], glossary: dict, profile: dict,
                         api_key: str, base_url: str, model: str,
                         raw_dir: str = "", embed_store: EmbedStore = None,
                         bilingual: bool = False) -> List[dict]:
     glossary_keys = list(glossary.keys())
 
-    bilingual_copied = []
-    if bilingual:
-        rest = []
-        for t in extracted:
-            eng = (t.get("eng_term") or "").strip()
-            if eng:
-                bilingual_copied.append({**t, "translation": eng, "match_type": "bilingual"})
-            else:
-                rest.append(t)
-        extracted = rest
-        logger.info(f"Bilingual copy: {len(bilingual_copied)} | fallback translate: {len(extracted)}")
-        if not extracted:
-            return _apply_term_corrections(bilingual_copied, profile)
+    def _clean(d):
+        for k in ("_ref_term", "_ref_trans", "_ref_sim", "eng_term"):
+            d.pop(k, None)
+        return d
 
-    exact_matched = []
-    need_translate = []
-
+    exact_matched, bilingual_copied, need_translate = [], [], []
     for t in extracted:
-        key = t["term"].lower()
-        if key in glossary:
-            exact_matched.append({**t, "translation": glossary[key][1], "match_type": "exact"})
+        eng = (t.get("eng_term") or "").strip() if bilingual else ""
+        hit = glossary.get(t["term"].lower())
+        if hit:
+            d = {**t, "translation": hit[1], "match_type": "exact"}
+            if eng and eng != hit[1]:
+                d["note"] = f"EN列与术语表不一致，EN列原文：{eng}"
+            exact_matched.append(d)
+        elif eng:
+            bilingual_copied.append({**t, "translation": eng, "match_type": "bilingual"})
         else:
             need_translate.append(t)
 
-    logger.info(f"Exact: {len(exact_matched)} | Need LLM translate: {len(need_translate)}")
+    logger.info(f"Exact: {len(exact_matched)} | Bilingual copy: {len(bilingual_copied)} | Need LLM translate: {len(need_translate)}")
 
     if not need_translate:
-        return _apply_term_corrections(bilingual_copied + exact_matched, profile)
+        return [_clean(d) for d in exact_matched + bilingual_copied]
 
     logger.info("Computing top-1 reference via embedding...")
     query_terms = [t["term"] for t in need_translate]
@@ -488,12 +467,7 @@ def match_and_translate(extracted: List[dict], glossary: dict, profile: dict,
         translated.append({**t, "translation": en, "match_type": "llm_translated",
                            "ref_term": t.pop("_ref_term", ""), "ref_trans": t.pop("_ref_trans", ""), "ref_sim": t.pop("_ref_sim", 0)})
 
-    def _clean(d):
-        for k in ("_ref_term", "_ref_trans", "_ref_sim", "eng_term"):
-            d.pop(k, None)
-        return d
-
-    return _apply_term_corrections([_clean(d) for d in bilingual_copied + exact_matched + translated], profile)
+    return [_clean(d) for d in exact_matched + bilingual_copied + translated]
 
 
 def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yanyun",
@@ -585,7 +559,7 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
         def _clean_no_translate(t):
             eng = t.pop("eng_term", "") or ""
             return {**t, "translation": eng, "match_type": "bilingual" if eng else "no_translate"}
-        results = _apply_term_corrections([_clean_no_translate(t) for t in extracted], profile)
+        results = [_clean_no_translate(t) for t in extracted]
         logger.info(f"No-translate mode: {len(results)} terms, {sum(1 for r in results if r['match_type']=='bilingual')} with EN copied")
     else:
         logger.info("Matching + translating via embedding...")

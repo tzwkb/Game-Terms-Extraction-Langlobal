@@ -260,7 +260,6 @@ get_token_param_name(model: str) -> str   # "max_tokens" or "max_output_tokens"
 | `extract_examples.exclude` | list[str] | — | system prompt 中的负例 |
 | `fewshot_examples` | list[dict] | — | `{input, output}` 格式的 few-shot 样本 |
 | `fewshot_examples_bilingual` | list[dict] | — | 双语模式专用 few-shot（output 含 zh_term/eng_term）；双语时优先于 `fewshot_examples` |
-| `term_corrections` | dict | — | 强制翻译覆盖 `{zh: en}` |
 | `translation_rules` | list[str] | — | 翻译风格规则，注入翻译 prompt |
 | `rule_extractors.surname_names` | dict | — | 基于姓氏的规则抽取（燕云专用） |
 | `core_principle` | str | — | 追加到 system prompt 开头的核心原则 |
