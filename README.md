@@ -18,12 +18,20 @@ streamlit run ui/app.py
 
 ```
 原文.xlsx + 术语表.xlsx
-  ├─ AI 表头自动识别
+  ├─ AI 列自动识别（原文列 / Key列 / 双语英文列 / 术语表中英列）
   ├─ NER 预扫描（人名/地名）
   ├─ LLM 术语提取（3轮投票，取3票一致项）
   ├─ 向量嵌入匹配（精确命中走术语表）
-  └─ LLM 翻译（新术语）→ results.xlsx
+  └─ LLM 翻译（新术语）
+        ├─ results.xlsx（原始结果，含调试字段）
+        └─ 候选术语_模板.xlsx（8列标注模板，含来源行 Key，审核状态=未审核）
 ```
+
+## 人工审校闭环（标注工具）
+
+提取结果不是终点：`候选术语_模板.xlsx` 导入配套的 **[术语标注助手](annotation/README.md)**（`annotation/术语标注助手_v3.0.html`，浏览器双击即用）做人工标注审核，导出的审定术语表可直接回流本工具作为下次提取的术语表输入。
+
+CLI 绑定源文件 Key 列用 `--key-col <列索引>`；UI 上传后自动识别，可手动改。
 
 ## 目录结构
 
@@ -39,6 +47,8 @@ streamlit run ui/app.py
 ├── ui/
 │   ├── app.py              # Streamlit 前端
 │   └── ui_backend.py       # UI 适配层
+├── annotation/             # 术语标注助手（人工审校工作台，单HTML）
+├── scripts/                # 验证与评估脚本
 ├── profiles/               # 游戏配置文件（YAML）
 ├── database/               # 向量库缓存（自动生成）
 ├── output/                 # 运行结果（自动生成）
