@@ -33,6 +33,16 @@ check('escapeHtml', mod.escapeHtml('<a b="c">&') === '&lt;a b=&quot;c&quot;&gt;&
   check('no match on unrelated text', ac2.search('xyz').matches.length === 0);
 }
 
+// case-insensitive matching (parity with demo v2.4 'gi' regex)
+{
+  const ac = mod.buildAC(['Sword Art', '墨门']);
+  const { matches, chars } = ac.search('the sword art of 墨门 and SWORD ART');
+  const picked = mod.pickNonOverlap(matches);
+  check('case-insensitive: all casings matched', picked.length === 3);
+  check('canonical word carried on match', picked.every(m => m.word === 'Sword Art' || m.word === '墨门'));
+  check('original casing preserved for display', chars.slice(picked[0].start, picked[0].end).join('') === 'sword art');
+}
+
 // AC scale smoke: 30k terms, 200-char text
 {
   const words = Array.from({ length: 30000 }, (_, i) => '词' + i.toString(36) + '条' + (i % 97));

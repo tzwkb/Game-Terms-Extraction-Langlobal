@@ -165,10 +165,16 @@ function escapeHtml(s) {
 
 function acNewNodes() { return [{ next: Object.create(null), fail: 0, out: null }]; }
 
+function acFold(ch) {
+  const l = ch.toLowerCase();
+  return l.length === 1 ? l : ch;
+}
+
 function acInsert(nodes, w) {
   if (!w) return;
   let cur = 0;
-  for (const ch of w) {
+  for (const raw of w) {
+    const ch = acFold(raw);
     let nxt = nodes[cur].next[ch];
     if (nxt === undefined) {
       nxt = nodes.length;
@@ -178,7 +184,7 @@ function acInsert(nodes, w) {
     cur = nxt;
   }
   if (!nodes[cur].out) nodes[cur].out = [];
-  if (!nodes[cur].out.includes(w.length)) nodes[cur].out.push(w.length);
+  if (!nodes[cur].out.some(o => o.len === w.length)) nodes[cur].out.push({ len: w.length, word: w });
 }
 
 function acSeedFail(nodes) {
@@ -197,7 +203,7 @@ function acFailStep(nodes, queue, qi, limit) {
       while (f && nodes[f].next[ch] === undefined) f = nodes[f].fail;
       nodes[v].fail = nodes[f].next[ch] !== undefined && nodes[f].next[ch] !== v ? nodes[f].next[ch] : 0;
       const fo = nodes[nodes[v].fail].out;
-      if (fo) { if (!nodes[v].out) nodes[v].out = []; for (const l of fo) if (!nodes[v].out.includes(l)) nodes[v].out.push(l); }
+      if (fo) { if (!nodes[v].out) nodes[v].out = []; for (const o of fo) if (!nodes[v].out.some(x => x.len === o.len)) nodes[v].out.push(o); }
       queue.push(v);
     }
   }
@@ -211,11 +217,11 @@ function acWrap(nodes) {
       let state = 0;
       const chars = Array.from(text);
       for (let i = 0; i < chars.length; i++) {
-        const ch = chars[i];
+        const ch = acFold(chars[i]);
         while (state && nodes[state].next[ch] === undefined) state = nodes[state].fail;
         state = nodes[state].next[ch] !== undefined ? nodes[state].next[ch] : 0;
         const out = nodes[state].out;
-        if (out) for (const len of out) matches.push({ start: i - len + 1, end: i + 1 });
+        if (out) for (const o of out) matches.push({ start: i - o.len + 1, end: i + 1, word: o.word });
       }
       return { matches, chars };
     }
@@ -401,11 +407,11 @@ function rebuildIndexFull(onDone) {
     for (; i < lim; i++) {
       const text = String(S.rows[i][S.termCol] ?? '');
       if (!text) continue;
-      const { matches, chars } = ac.search(text);
+      const { matches } = ac.search(text);
       if (!matches.length) continue;
       const seen = new Set();
       for (const m of matches) {
-        const term = chars.slice(m.start, m.end).join('');
+        const term = m.word;
         if (seen.has(term)) continue;
         seen.add(term);
         let arr = S.termIndex.get(term);
@@ -427,10 +433,11 @@ function rebuildIndexFull(onDone) {
 }
 function indexAddTerm(term) {
   if (!S.rows.length || S.termCol < 0) return;
+  const tl = term.toLowerCase();
   const ids = [];
   for (let i = 0; i < S.rows.length; i++) {
     const t = S.rows[i][S.termCol];
-    if (t && String(t).includes(term)) ids.push(i);
+    if (t && String(t).toLowerCase().includes(tl)) ids.push(i);
   }
   if (ids.length) S.termIndex.set(term, ids); else S.termIndex.delete(term);
 }
@@ -474,9 +481,9 @@ function highlightTerm(text) {
   let html = '', pos = 0;
   for (const m of picked) {
     html += escapeHtml(chars.slice(pos, m.start).join(''));
-    const term = chars.slice(m.start, m.end).join('');
-    const ok = S.termDetails.get(term)?.reviewStatus === 'approved';
-    html += `<span class="${ok ? 'hl-approved' : 'hl-pending'}" data-term="${escapeHtml(term)}">${escapeHtml(term)}</span>`;
+    const shown = chars.slice(m.start, m.end).join('');
+    const ok = S.termDetails.get(m.word)?.reviewStatus === 'approved';
+    html += `<span class="${ok ? 'hl-approved' : 'hl-pending'}" data-term="${escapeHtml(m.word)}">${escapeHtml(shown)}</span>`;
     pos = m.end;
   }
   html += escapeHtml(chars.slice(pos).join(''));
