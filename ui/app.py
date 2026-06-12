@@ -17,6 +17,7 @@ import streamlit as st
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+from core.main import results_to_template_df
 from ui.ui_backend import (
     RunConfig, default_config, ProcessingTask,
     get_all_models, add_custom_model, remove_model,
@@ -57,7 +58,7 @@ if st.session_state.cfg is None:
     st.session_state.cfg = cfg
 
 # Resolve pending widget changes from previous handler runs (before any widget renders)
-for _key in ("sel_model", "sel_profile", "_src_col", "_gl_cn_col", "_gl_en_col"):
+for _key in ("sel_model", "sel_profile", "_src_col", "_gl_cn_col", "_gl_en_col", "_key_col", "_src_en_col", "_bilingual"):
     _pending = f"_pending_{_key}"
     if _pending in st.session_state:
         st.session_state[_key] = st.session_state.pop(_pending)
@@ -287,6 +288,7 @@ elif page_id == "process":
     gl_cn_col = st.session_state.get("_gl_cn_col", 0)
     gl_en_col = st.session_state.get("_gl_en_col", 1)
     src_en_col = st.session_state.get("_src_en_col", 1)
+    key_col = st.session_state.get("_key_col", -1)
 
     if eff_src and eff_gl and not st.session_state.get("_col_detected"):
         from core.header_detect import detect_source_column, detect_glossary_columns
@@ -296,6 +298,10 @@ elif page_id == "process":
             d_src = detect_source_column(df_src)
             d_gl = detect_glossary_columns(df_gl)
             st.session_state._pending__src_col = d_src["text_col"]
+            st.session_state._pending__key_col = d_src["key_col"] if d_src.get("key_col") is not None else -1
+            if d_src.get("en_col") is not None:
+                st.session_state._pending__src_en_col = d_src["en_col"]
+                st.session_state._pending__bilingual = True
             st.session_state._pending__gl_cn_col = d_gl["cn_col"]
             st.session_state._pending__gl_en_col = d_gl["en_col"]
             st.session_state._col_info = {"src": d_src, "gl": d_gl}
@@ -318,6 +324,13 @@ elif page_id == "process":
                          index=min(st.session_state.get("_src_col", 0), len(src_headers) - 1),
                          format_func=lambda i: f"[{i}] {src_headers[i]}",
                          key="_src_col")
+            _key_val = st.session_state.get("_key_col", -1)
+            if _key_val >= len(src_headers):
+                _key_val = -1
+            st.selectbox("Key列（可选，填充导出模板的 Key值）", list(range(-1, len(src_headers))),
+                         index=_key_val + 1,
+                         format_func=lambda i: "（未设置）" if i == -1 else f"[{i}] {src_headers[i]}",
+                         key="_key_col")
             cfg.bilingual = st.checkbox(
                 "双语模式（原文已含官方英文，直接照抄，不重译）",
                 value=cfg.bilingual, key="_bilingual")
@@ -348,6 +361,7 @@ elif page_id == "process":
         gl_cn_col = st.session_state.get("_gl_cn_col", 0)
         gl_en_col = st.session_state.get("_gl_en_col", 1)
         src_en_col = st.session_state.get("_src_en_col", 1)
+        key_col = st.session_state.get("_key_col", -1)
 
     # ── Checkpoint status ──────────────────────
     ckpt_root = Path("output") / "_checkpoints"
@@ -366,6 +380,7 @@ elif page_id == "process":
                             "total": data.get("total_chunks", 0),
                             "terms": len(data.get("terms", [])),
                             "src_col": meta.get("src_col", 0),
+                            "key_col": meta.get("key_col"),
                             "gl_cn_col": meta.get("gl_cn_col", 0),
                             "gl_en_col": meta.get("gl_en_col", 1),
                             "bilingual": meta.get("bilingual", False),
@@ -419,7 +434,8 @@ elif page_id == "process":
                                    gl_cn_col=c.get("gl_cn_col", 0),
                                    gl_en_col=c.get("gl_en_col", 1),
                                    src_en_col=c.get("src_en_col", 1),
-                                   src_bytes=src_path.read_bytes())
+                                   src_bytes=src_path.read_bytes(),
+                                   key_col=c.get("key_col"))
                         st.session_state.task = task
                         st.session_state.task_results = None
                         st.session_state._results_saved = False
@@ -455,7 +471,8 @@ elif page_id == "process":
             task = ProcessingTask()
             task.start(str(src_path), str(gl_path), cfg,
                        src_col=src_col, gl_cn_col=gl_cn_col, gl_en_col=gl_en_col,
-                       src_en_col=src_en_col, src_bytes=eff_src)
+                       src_en_col=src_en_col, src_bytes=eff_src,
+                       key_col=None if key_col < 0 else key_col)
             st.session_state.task = task
             st.session_state.task_results = None
             st.session_state._results_saved = False
@@ -495,6 +512,8 @@ elif page_id == "process":
                                     if task.output_dir
                                     else ROOT / "output" / f"results_{time.strftime('%Y%m%d_%H%M%S')}.xlsx")
                         pd.DataFrame(task.results).to_excel(out_path, index=False)
+                        tpl_path = out_path.with_name(out_path.name.replace("results", "候选术语_模板"))
+                        results_to_template_df(task.results).to_excel(tpl_path, index=False)
                         st.session_state._results_saved = True
                 st.session_state.task = None
                 return
@@ -583,18 +602,34 @@ elif page_id == "results":
         st.subheader("全部术语")
         st.dataframe(df, use_container_width=True, height=400)
 
+        tpl_io = BytesIO()
+        with pd.ExcelWriter(tpl_io, engine="openpyxl") as writer:
+            results_to_template_df(results).to_excel(writer, index=False, sheet_name="术语表")
+        tpl_io.seek(0)
+
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="terms")
         output.seek(0)
 
-        st.download_button(
-            "下载结果 xlsx",
-            data=output,
-            file_name="terms_extraction_results.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary",
-        )
+        c_dl1, c_dl2 = st.columns(2)
+        with c_dl1:
+            st.download_button(
+                "下载标注模板 xlsx（8列，导入标注工具）",
+                data=tpl_io,
+                file_name="候选术语_模板.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True,
+            )
+        with c_dl2:
+            st.download_button(
+                "下载原始结果 xlsx",
+                data=output,
+                file_name="terms_extraction_results.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
 
 # ═══════════════════════════════════════════════════════════
 # Sidebar footer

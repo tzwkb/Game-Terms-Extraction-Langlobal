@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, time, signal, json, re
+import sys, os, time, signal, json, re, datetime
 import asyncio
 
 if sys.platform == "win32":
@@ -24,6 +24,7 @@ class PipelineOpts:
     no_translate: bool = False
     src_col: int = 0
     src_en_col: int = 1
+    key_col: Optional[int] = None
     gl_cn_col: int = 0
     gl_en_col: int = 1
     embed_workers: int = 16
@@ -42,6 +43,29 @@ from core.embed_store import EmbedStore
 from core.retry import retry_async
 import logging
 logger = logging.getLogger("pipeline")
+
+TEMPLATE_COLUMNS = ["Key值", "术语分类", "术语原文", "术语译文", "备注", "来源原文", "审核状态", "最新修订时间"]
+
+
+def results_to_template_df(results: List[dict], timestamp: str = "") -> pd.DataFrame:
+    """Convert pipeline results to the unified 8-column annotation template."""
+    ts = timestamp or datetime.datetime.now().isoformat(timespec="seconds")
+
+    def _cell(r, k):
+        v = r.get(k, "")
+        return "" if v is None or (not isinstance(v, str) and pd.isna(v)) else str(v)
+
+    rows = [{
+        "Key值": _cell(r, "source_key"),
+        "术语分类": _cell(r, "category"),
+        "术语原文": _cell(r, "term"),
+        "术语译文": _cell(r, "translation"),
+        "备注": "",
+        "来源原文": _cell(r, "source_text"),
+        "审核状态": "未审核",
+        "最新修订时间": ts,
+    } for r in results]
+    return pd.DataFrame(rows, columns=TEMPLATE_COLUMNS)
 
 _VAR_RE = re.compile(r'\$\{[^}]*\}|\$[a-zA-Z_]\w*|\$\d+|\{[^}]*\}|</?[a-zA-Z][^>]*>')
 
@@ -87,18 +111,22 @@ def load_glossary(path: str, cn_col: int = 0, en_col: int = 1) -> Tuple[dict, se
     return glossary, keys
 
 
-def _batch_match_context(terms: List[dict], source_texts: List[str]) -> None:
+def _batch_match_context(terms: List[dict], source_texts: List[str], source_keys: List[str] = None) -> None:
     remaining = {t["term"] for t in terms}
     term_context: Dict[str, str] = {}
-    for text in source_texts:
+    term_key: Dict[str, str] = {}
+    for i, text in enumerate(source_texts):
         found = [term for term in remaining if term in text]
         for term in found:
             term_context[term] = text.replace("\n", " ").strip()
+            if source_keys:
+                term_key[term] = source_keys[i]
             remaining.discard(term)
         if not remaining:
             break
     for t in terms:
         t["source_text"] = term_context.get(t["term"], "")
+        t["source_key"] = term_key.get(t["term"], "")
 
 
 def _chunk_texts(texts: List[str], target_chars: int, overlap: int = 3) -> List[str]:
@@ -281,7 +309,7 @@ def extract_terms(texts: List[str], profile: dict, api_key: str, base_url: str, 
                   target_chars: int = 1200,
                   output_dir: str = "", raw_dir: str = "", checkpoint_dir: str = "",
                   glossary_keys: set = None, opts: PipelineOpts = PipelineOpts(),
-                  progress_callback: callable = None) -> List[dict]:
+                  progress_callback: callable = None, text_keys: List[str] = None) -> List[dict]:
     concurrent = opts.max_concurrent or EXTRACTOR_CONFIG["max_concurrent"]
     max_tokens = opts.max_tokens or EXTRACTOR_CONFIG["max_tokens"]
     if not output_dir:
@@ -369,7 +397,7 @@ def extract_terms(texts: List[str], profile: dict, api_key: str, base_url: str, 
     if before != len(terms):
         logger.info(f"_filter_derived_terms removed {before - len(terms)} NPC nickname variants ({before} → {len(terms)})")
 
-    _batch_match_context(terms, texts)
+    _batch_match_context(terms, texts, text_keys)
 
     return terms
 
@@ -467,6 +495,7 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
         ckpt_save_meta(checkpoint_dir, {
             "src_col": opts.src_col, "gl_cn_col": opts.gl_cn_col, "gl_en_col": opts.gl_en_col,
             "bilingual": opts.bilingual, "src_en_col": opts.src_en_col, "no_translate": opts.no_translate,
+            "key_col": opts.key_col,
             "src_filename": existing_meta.get("src_filename") or Path(source_path).name,
             "gl_filename": existing_meta.get("gl_filename") or Path(glossary_path).name,
         })
@@ -486,27 +515,48 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
         logger.info(f"Embedding store synced: +{added} added, -{removed} removed, {embed_store.count} total")
 
     df_src = pd.read_excel(source_path)
+    def _key_str(v):
+        if pd.isna(v):
+            return ""
+        if isinstance(v, float) and v.is_integer():
+            return str(int(v))
+        return str(v)
+
+    keys_raw = (df_src.iloc[:, opts.key_col].map(_key_str)
+                if opts.key_col is not None and 0 <= opts.key_col < df_src.shape[1] else None)
     if opts.bilingual:
         zh_raw = df_src.iloc[:, opts.src_col].fillna("").astype(str)
         en_raw = df_src.iloc[:, opts.src_en_col].fillna("").astype(str)
-        pairs = []
-        for z, e in zip(zh_raw, en_raw):
+        pairs, pair_keys = [], {}
+        for pos, (z, e) in enumerate(zip(zh_raw, en_raw)):
             z, e = _clean_src_text(z), _clean_src_text(e)
-            if _has_content(z):
+            if not _has_content(z):
+                continue
+            if (z, e) not in pair_keys:
+                pair_keys[(z, e)] = keys_raw.iloc[pos] if keys_raw is not None else ""
                 pairs.append((z, e))
-        pairs = list(dict.fromkeys(pairs))
         texts = [f"ZH: {z} | EN: {e}" for z, e in pairs]
+        text_keys = [pair_keys[p] for p in pairs]
         logger.info(f"Source (bilingual): {len(df_src)} rows -> {len(texts)} texts (dropped empty/punct/dup)")
     else:
-        raw = df_src.iloc[:, opts.src_col].dropna().astype(str).tolist()
-        cleaned = [_clean_src_text(t) for t in raw]
-        texts = list(dict.fromkeys(s for s in cleaned if _has_content(s)))
+        src_raw = df_src.iloc[:, opts.src_col]
+        texts, text_keys, seen = [], [], set()
+        for pos in range(len(df_src)):
+            v = src_raw.iloc[pos]
+            if pd.isna(v):
+                continue
+            s = _clean_src_text(str(v))
+            if not _has_content(s) or s in seen:
+                continue
+            seen.add(s)
+            texts.append(s)
+            text_keys.append(keys_raw.iloc[pos] if keys_raw is not None else "")
         logger.info(f"Source: {len(df_src)} rows -> {len(texts)} texts (dropped empty/punct/dup)")
     if progress_callback:
         progress_callback("loading", 1, 1, f"{len(texts)} texts loaded, {len(glossary_keys)} glossary terms")
         progress_callback("extracting", 0, 1, "即将开始提取…")
     logger.info("Extracting terms...")
-    extracted = extract_terms(texts, profile, api_key, base_url, model, output_dir=output_dir, raw_dir=raw_dir, checkpoint_dir=checkpoint_dir, glossary_keys=glossary_keys, opts=opts, progress_callback=progress_callback)
+    extracted = extract_terms(texts, profile, api_key, base_url, model, output_dir=output_dir, raw_dir=raw_dir, checkpoint_dir=checkpoint_dir, glossary_keys=glossary_keys, opts=opts, progress_callback=progress_callback, text_keys=text_keys)
 
     filterable = set(profile.get("filterable_categories", []))
     if filterable:

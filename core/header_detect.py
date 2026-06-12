@@ -41,9 +41,10 @@ def _ai_detect(df: pd.DataFrame, file_type: str) -> dict:
         sample_text += f"第{ri+1}行: " + " | ".join(f"[{i}] {cell}" for i, cell in enumerate(row)) + "\n"
 
     if file_type == "source":
-        context = ("这是一个游戏文本文件，需要找出哪一列包含**需要提取术语的原文文本**。"
-                   "忽略 Key/ID、编号、备注等辅助列。")
-        output_format = '{"text_col": <列索引数字>}'
+        context = ("这是一个游戏文本文件，需要找出：1) 哪一列包含**需要提取术语的中文原文文本**；"
+                   "2) 哪一列是行唯一标识（Key/ID/编号，通常是字符串编码或数字序号），没有则 key_col 为 null；"
+                   "3) 哪一列是与原文**逐行对照的英文译文**（整句翻译，不是备注或分类），没有则 en_col 为 null。")
+        output_format = '{"text_col": <列索引数字>, "key_col": <列索引数字或null>, "en_col": <列索引数字或null>}'
     else:
         context = ("这是一个游戏术语表文件，需要找出哪一列是**中文术语原文**，哪一列是对应的**英文译文**。"
                    "表中可能还有 Key、分类、备注、来源、审核状态、修订时间等其他列（如「术语分类」是分类标签而非术语本身），不要选这些列。")
@@ -71,15 +72,21 @@ def _ai_detect(df: pd.DataFrame, file_type: str) -> dict:
 # ── Public API ───────────────────────────────────────────
 
 def detect_source_column(df: pd.DataFrame) -> dict:
-    """Return {"text_col": int, "method": "ai"|"default", "confidence": str}"""
+    """Return {"text_col": int, "key_col": int|None, "en_col": int|None, "method": "ai"|"default", "confidence": str}"""
     try:
         ai = _ai_detect(df, "source")
         col = ai.get("text_col")
         if col is not None and 0 <= col < len(df.columns):
-            return {"text_col": col, "method": "ai", "confidence": "高（AI 识别）"}
+            key = ai.get("key_col")
+            if key is None or not (0 <= key < len(df.columns)) or key == col:
+                key = None
+            en = ai.get("en_col")
+            if en is None or not (0 <= en < len(df.columns)) or en == col or en == key:
+                en = None
+            return {"text_col": col, "key_col": key, "en_col": en, "method": "ai", "confidence": "高（AI 识别）"}
     except Exception:
         pass
-    return {"text_col": 0, "method": "default", "confidence": "低（默认第一列，请人工确认）"}
+    return {"text_col": 0, "key_col": None, "en_col": None, "method": "default", "confidence": "低（默认第一列，请人工确认）"}
 
 
 def detect_glossary_columns(df: pd.DataFrame) -> dict:

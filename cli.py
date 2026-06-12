@@ -4,7 +4,7 @@ import os, time, argparse
 from pathlib import Path
 import pandas as pd
 
-from core.main import run_pipeline, PipelineOpts
+from core.main import run_pipeline, PipelineOpts, results_to_template_df
 from core.checkpoint import checkpoint_dir_name
 from config_template import DEFAULT_API_BASE, DEFAULT_MODEL, DEFAULT_PROFILE, DEFAULT_EMBED_WORKERS
 
@@ -21,6 +21,8 @@ def main():
     parser.add_argument("--checkpoint", default="",
                         help="Checkpoint dir for resumable runs (auto-generated if not set)")
     parser.add_argument("--src-col", type=int, default=0, help="原文文本列索引")
+    parser.add_argument("--key-col", type=int, default=None,
+                        help="源文件 Key/ID 列索引（可选，填充导出模板的 Key值 列）")
     parser.add_argument("--gl-cn-col", type=int, default=0, help="术语表中文列索引")
     parser.add_argument("--gl-en-col", type=int, default=1, help="术语表英文列索引")
     parser.add_argument("--bilingual", action="store_true",
@@ -41,7 +43,7 @@ def main():
 
     opts = PipelineOpts(
         bilingual=args.bilingual, no_translate=args.no_translate,
-        src_col=args.src_col, src_en_col=args.src_en_col,
+        src_col=args.src_col, src_en_col=args.src_en_col, key_col=args.key_col,
         gl_cn_col=args.gl_cn_col, gl_en_col=args.gl_en_col,
         embed_workers=args.embed_workers,
         max_concurrent=args.concurrent, max_tokens=args.max_tokens,
@@ -53,7 +55,8 @@ def main():
 
     os.makedirs(out_dir, exist_ok=True)
     pd.DataFrame(results).to_excel(f"{out_dir}/results.xlsx", index=False)
-    print(f"\nDone. {len(results)} terms. Output: {out_dir}")
+    results_to_template_df(results).to_excel(f"{out_dir}/候选术语_模板.xlsx", index=False)
+    print(f"\nDone. {len(results)} terms. Output: {out_dir} (results.xlsx + 候选术语_模板.xlsx)")
     print(f"Total: {(time.time()-t0)/60:.1f}m")
 
 

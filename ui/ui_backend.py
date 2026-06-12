@@ -435,7 +435,7 @@ class ProcessingTask:
 
     def start(self, source_path: str, glossary_path: str, cfg: RunConfig,
               on_done: Callable = None, src_col: int = 0, gl_cn_col: int = 0, gl_en_col: int = 1,
-              src_en_col: int = 1, src_bytes: bytes = b""):
+              src_en_col: int = 1, src_bytes: bytes = b"", key_col: int = None):
         self.done = False
         self.error = None
         self.results = []
@@ -448,7 +448,7 @@ class ProcessingTask:
         self._stop.clear()
         self._thread = threading.Thread(
             target=self._run, args=(source_path, glossary_path, cfg, on_done,
-                                     src_col, gl_cn_col, gl_en_col, src_en_col, src_bytes), daemon=True
+                                     src_col, gl_cn_col, gl_en_col, src_en_col, src_bytes, key_col), daemon=True
         )
         self._thread.start()
 
@@ -461,7 +461,8 @@ class ProcessingTask:
         self.info = info
 
     def _run(self, source_path: str, glossary_path: str, cfg: RunConfig, on_done,
-             src_col: int = 0, gl_cn_col: int = 0, gl_en_col: int = 1, src_en_col: int = 1, src_bytes: bytes = b""):
+             src_col: int = 0, gl_cn_col: int = 0, gl_en_col: int = 1, src_en_col: int = 1,
+             src_bytes: bytes = b"", key_col: int = None):
         try:
             import time as _time
             from core.main import run_pipeline, PipelineOpts
@@ -479,7 +480,7 @@ class ProcessingTask:
 
             opts = PipelineOpts(
                 bilingual=cfg.bilingual, no_translate=cfg.no_translate,
-                src_col=src_col, src_en_col=src_en_col,
+                src_col=src_col, src_en_col=src_en_col, key_col=key_col,
                 gl_cn_col=gl_cn_col, gl_en_col=gl_en_col,
                 embed_workers=cfg.embed_workers,
                 max_concurrent=cfg.max_concurrent,

@@ -43,6 +43,13 @@ SOURCE_3COL = pd.DataFrame({
     "备注": ["", "新手引导"],
 })
 
+SOURCE_BILINGUAL = pd.DataFrame({
+    "Key": ["DLG_001", "DLG_002"],
+    "中文": ["青长老说墨门弟子需恪守门规。", "你习得了八荒剑诀第一式。"],
+    "English": ["Elder Qing said Momen disciples must obey the rules.",
+                "You have learned the first form of Eight Wilds Sword Art."],
+})
+
 results = []
 
 
@@ -65,7 +72,12 @@ r = detect_glossary_columns(SWAPPED_2COL)
 check("swapped 2-col (EN first) -> cn=1, en=0", r, {"cn_col": 1, "en_col": 0, "method": "ai"})
 
 r = detect_source_column(SOURCE_3COL)
-check("source 3-col (key/text/note) -> text_col=1", r, {"text_col": 1, "method": "ai"})
+check("source 3-col (key/text/note) -> text=1, key=0, no en", r,
+      {"text_col": 1, "key_col": 0, "en_col": None, "method": "ai"})
+
+r = detect_source_column(SOURCE_BILINGUAL)
+check("bilingual source -> text=1, key=0, en=2", r,
+      {"text_col": 1, "key_col": 0, "en_col": 2, "method": "ai"})
 
 _orig_base = hd.DETECT_API_BASE
 hd.DETECT_API_BASE = "http://127.0.0.1:9/v1"
