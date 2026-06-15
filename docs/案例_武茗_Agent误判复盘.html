@@ -124,7 +124,7 @@
 
   <section style="border-top:none">
     <div class="summary">
-      <p>程序在抽术语时，把一个<strong>真实存在的角色名「武茗」</strong>，当成了"模型乱编出来的词"，并且<strong>自动把它删掉了</strong>。后来我提了一个问题，发现判断有误——武茗是真的，只是原文里它中间多打了两个空格，程序没核对上。已修正，并改掉了"自动删"的做法。</p>
+      <p>程序在抽术语时，把一个<strong>真实存在的角色名「武茗」</strong>，当成了"模型乱编出来的词"，并且<strong>自动把它删掉了</strong>——还顺手把"自动删这类词"写进了程序。后来我提了一个问题，发现判断有误——武茗是真的，只是原文里它中间多打了两个空格，程序没核对上。已修正，并改掉了"自动删"的做法。</p>
     </div>
   </section>
 
@@ -147,13 +147,20 @@
   </section>
 
   <section>
+    <div class="kicker">它做了什么</div>
+    <h2>它改的不只是结果，是程序本身</h2>
+    <p>更要紧的是：Agent 不只是删了这一个词。它<strong>顺手改了程序</strong>，加了一条规则——"<strong>以后凡是核对不上来源的词，就自动删掉</strong>"，而且已经跑了一遍。</p>
+    <p>换句话说，要是当时没被发现，这条规则会一直留在程序里，把以后每一个有类似格式问题的真词都悄悄删掉。<strong>它本可以只做个标记、交人来看，却直接选了"自动删"——而且是照一个没核实的判断去做的。</strong></p>
+  </section>
+
+  <section>
     <div class="kicker">当时的对话</div>
     <h2>是我一句提问，把它拦下的</h2>
     <p>下面是当时真实的来回（按发生顺序，略去技术细节）：</p>
     <div class="talk">
       <div class="h">古剑术语提取 · 质检对话</div>
       <div class="turn a"><div class="who">Agent</div><div class="msg"><span class="lbl">判断（错）</span><br><q>武茗 是模型在一串角色名里编出来的词，原文里根本没有，该删。</q></div></div>
-      <div class="turn a"><div class="who">Agent</div><div class="msg"><span class="lbl">自己动手</span><br>随后按这个判断，自动把武茗从结果里删掉了。</div></div>
+      <div class="turn a"><div class="who">Agent</div><div class="msg"><span class="lbl">自己动手</span><br>随后不仅把武茗从结果里删了，还把"以后核对不上来源就自动删"这条规则写进了程序、跑了一遍。</div></div>
       <div class="turn h"><div class="who">我</div><div class="msg"><span class="lbl">一句提问</span><br><q>但这个词的出现，是因为查三遍都同时编出了同一个吗？这概率太小了吧。</q><span class="g">（程序对每条原文会独立查三遍，三遍都认出来才保留。三遍都凭空编出同一个名字，几乎不可能——所以它八成是真的。）</span></div></div>
       <div class="turn f"><div class="who">Agent</div><div class="msg"><span class="lbl">查证后认错</span><br><q>你说得对，是我错了——武茗 不是编的，是真词。</q><span class="g">原文 560 行里它中间多了两个空格。随后把删掉的词恢复，并改了做法。</span></div></div>
     </div>
