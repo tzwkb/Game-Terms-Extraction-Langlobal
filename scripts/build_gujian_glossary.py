@@ -3,16 +3,20 @@
 """Build the Gujian (古剑奇谭四 / Project SOL) glossary xlsx — the pipeline's
 ★命门 term-table input (load_glossary reads col0=中文, col1=英文; row1=header).
 
-Sources merged:
-  [术语表]  the official term table the PM provided (CN/EN/category/importance)
-  [世界观]  CN→EN pairs extracted from the bilingual "Project SOL info" worldview doc
-            (official translations embedded in the doc; flagged for review)
+Two SEPARATE outputs — glossary must stay authoritative:
+  GLOSSARY   = [术语表] rows only (the official term table the user/client gave).
+               This is what --glossary consumes; an exact match is APPLIED VERBATIM
+               (translation = glossary EN, no LLM, no human review) so it MUST be
+               human-confirmed. -> test_file/gujian_glossary.xlsx
+  CANDIDATES = [世界观] rows — CN→EN pairs mined from the bilingual worldview doc.
+               NOT a glossary: prose renderings are contextual/inconsistent and the
+               pairing can err. Review-candidates / prompt hints only; promote into
+               the glossary only after a human confirms. -> gujian_term_candidates.xlsx
 
-Slash variants ("古剑/剑") are expanded to one row each, sharing EN — so the
-matcher hits every surface form. Output columns: 中文术语 | 英文翻译 | 分类 |
-重要度 | 来源 | 备注. Pipeline reads only the first two; the rest are for humans.
+Slash variants ("古剑/剑") expand to one row each, sharing EN. Columns: 中文术语 |
+英文翻译 | 分类 | 重要度 | 来源 | 备注 (pipeline reads only the first two).
 
-Usage: python scripts/build_gujian_glossary.py [--out test_file/gujian_glossary.xlsx]
+Usage: python scripts/build_gujian_glossary.py
 """
 import argparse
 from pathlib import Path
@@ -174,15 +178,10 @@ def expand(rows):
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=str(ROOT / "test_file" / "gujian_glossary.xlsx"))
-    args = ap.parse_args()
-
-    rows = expand(TERMS)
+def _write(rows, path, title):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "glossary"
+    ws.title = title
     ws.append(HEADER)
     for c in ws[1]:
         c.font = Font(bold=True, color="FFFFFF")
@@ -190,21 +189,32 @@ def main():
         c.alignment = Alignment(vertical="center")
     for r in rows:
         ws.append(r)
-    widths = [16, 34, 12, 9, 8, 20]
-    for i, w in enumerate(widths, 1):
+    for i, w in enumerate([16, 34, 12, 9, 8, 20], 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
     ws.freeze_panes = "A2"
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    wb.save(args.out)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=str(ROOT / "test_file" / "gujian_glossary.xlsx"),
+                    help="authoritative glossary — official term table ONLY")
+    ap.add_argument("--candidates-out", default=str(ROOT / "test_file" / "gujian_term_candidates.xlsx"),
+                    help="worldview-mined hints — NOT a glossary, never pass as --glossary")
+    args = ap.parse_args()
+
+    official = expand([t for t in TERMS if t[4] == "术语表"])
+    candidates = expand([t for t in TERMS if t[4] != "术语表"])
+    _write(official, args.out, "glossary")
+    _write(candidates, args.candidates_out, "candidates")
 
     from collections import Counter
-    cats = Counter(r[2] for r in rows)
-    src = Counter(r[4] for r in rows)
-    print(f"OK -> {args.out}")
-    print(f"  rows: {len(rows)} terms (header row excluded from glossary)")
-    print(f"  by source: {dict(src)}")
-    print(f"  by category: {dict(cats)}")
-    print("  pipeline uses col0=中文术语, col1=英文翻译; 世界观-sourced rows = review-then-trust")
+    print(f"GLOSSARY (权威·官方术语表) -> {args.out}")
+    print(f"  {len(official)} terms — 作 --glossary；精确命中=直接套此译文")
+    print(f"CANDIDATES (世界观自抽·非glossary) -> {args.candidates_out}")
+    print(f"  {len(candidates)} terms — 仅人工核对/提示词hint，核实后才可并入glossary，切勿当 --glossary")
+    print(f"  candidate by category: {dict(Counter(r[2] for r in candidates))}")
 
 
 if __name__ == "__main__":
