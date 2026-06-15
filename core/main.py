@@ -30,6 +30,7 @@ class PipelineOpts:
     embed_workers: int = 16
     max_concurrent: Optional[int] = None
     max_tokens: Optional[int] = None
+    flag_unsourced: bool = True
 
 from config import EXTRACTOR_CONFIG, VOTE_TEMPS
 from core.prompt_base import build_system_prompt, build_user_prompt, build_translation_prompt
@@ -123,11 +124,15 @@ def load_glossary(path: str, cn_col: int = 0, en_col: int = 1) -> Tuple[dict, se
 
 
 def _batch_match_context(terms: List[dict], source_texts: List[str], source_keys: List[str] = None) -> None:
+    # whitespace-tolerant: source may hold internal spaces the model stripped (e.g. "武  茗" -> "武茗")
+    _ws = re.compile(r"\s+")
+    nterm = {t["term"]: _ws.sub("", t["term"]) for t in terms}
     remaining = {t["term"] for t in terms}
     term_context: Dict[str, str] = {}
     term_key: Dict[str, str] = {}
     for i, text in enumerate(source_texts):
-        found = [term for term in remaining if term in text]
+        ntext = _ws.sub("", text)
+        found = [term for term in remaining if nterm[term] in ntext]
         for term in found:
             term_context[term] = text.replace("\n", " ").strip()
             if source_keys:
@@ -559,6 +564,15 @@ def run_pipeline(source_path: str, glossary_path: str, profile_name: str = "yany
         extracted = [t for t in extracted if t.get("category") not in filterable or _in_glossary(t["term"], glossary_keys)]
         if before != len(extracted):
             logger.info(f"category filter removed {before - len(extracted)} terms ({before} → {len(extracted)})")
+
+    if opts.flag_unsourced:
+        # source-not-found may be a real term (matching artifact) OR a hallucination — flag, never drop
+        flagged = [t for t in extracted if not (t.get("source_text") or "").strip()]
+        for t in flagged:
+            t["note"] = "; ".join(filter(None, [t.get("note", ""), "⚠原文未命中,待核"]))
+        if flagged:
+            logger.info(f"flagged {len(flagged)} unsourced term(s) for review (not dropped): "
+                        + "、".join(t["term"] for t in flagged))
 
     if opts.no_translate:
         def _clean_no_translate(t):

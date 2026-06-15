@@ -30,6 +30,8 @@ def main():
                         help="双语模式下原文的英文列索引")
     parser.add_argument("--no-translate", action="store_true",
                         help="跳过 LLM 翻译，仅提取术语（双语模式照抄 EN 列）")
+    parser.add_argument("--no-flag-unsourced", action="store_true",
+                        help="不给原文未命中的词在备注打⚠待核标记（默认标记，不删除）")
     parser.add_argument("--concurrent", type=int, default=None, help="并发数")
     parser.add_argument("--max-tokens", type=int, default=None, help="单次最大 token")
     parser.add_argument("--embed-workers", type=int, default=DEFAULT_EMBED_WORKERS, help="向量同步并发")
@@ -46,6 +48,7 @@ def main():
         gl_cn_col=args.gl_cn_col, gl_en_col=args.gl_en_col,
         embed_workers=args.embed_workers,
         max_concurrent=args.concurrent, max_tokens=args.max_tokens,
+        flag_unsourced=not args.no_flag_unsourced,
     )
     results = run_pipeline(args.source, args.glossary, args.profile,
                            args.api_key, args.base_url, args.model,
