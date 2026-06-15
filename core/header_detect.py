@@ -6,14 +6,15 @@ in this single file and must not be surfaced in UI/config. Callers pass
 only a DataFrame.
 """
 
+import os
 import json
 import re
 import pandas as pd
 from openai import OpenAI
 
-DETECT_API_KEY = "***REMOVED-KEY***"
-DETECT_API_BASE = "https://api.vectorengine.ai/v1"
-DETECT_MODEL = "gemini-3.1-flash-lite"
+DETECT_API_KEY = os.getenv("DETECT_API_KEY")
+DETECT_API_BASE = os.getenv("DETECT_API_BASE", "https://api.vectorengine.ai/v1")
+DETECT_MODEL = os.getenv("DETECT_MODEL", "gemini-3.1-flash-lite")
 
 
 def _headers_and_sample(df: pd.DataFrame, max_rows: int = 4) -> tuple:
@@ -50,6 +51,8 @@ def _ai_detect(df: pd.DataFrame, file_type: str) -> dict:
                    "表中可能还有 Key、分类、备注、来源、审核状态、修订时间等其他列（如「术语分类」是分类标签而非术语本身），不要选这些列。")
         output_format = '{"cn_col": <列索引数字>, "en_col": <列索引数字>}'
 
+    if not DETECT_API_KEY:
+        raise RuntimeError("DETECT_API_KEY env var not set (header auto-detection requires an API key)")
     client = OpenAI(api_key=DETECT_API_KEY, base_url=DETECT_API_BASE, timeout=30)
     resp = client.chat.completions.create(
         model=DETECT_MODEL,
