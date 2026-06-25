@@ -32,6 +32,18 @@ LOGO = str(ROOT / "assets" / "logo.jpeg")
 st.set_page_config(page_title="游戏术语提取工具 — Langlobal", page_icon=LOGO, layout="wide")
 st.logo(LOGO)
 
+# Langlobal logo 四角钝化（品牌规范：小圆角方形，非直角）
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebarLogo"],
+    [data-testid="stLogo"],
+    [data-testid="stHeaderLogo"] { border-radius: 12px !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ═══════════════════════════════════════════════════════════
 # Session state init
 # ═══════════════════════════════════════════════════════════

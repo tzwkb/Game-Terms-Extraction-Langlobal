@@ -37,7 +37,7 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
 body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #faf8f2; padding: 24px; color: #1d2125; }
 .app-header { max-width: 1700px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .app-header h1 { font-size: 1.8rem; font-weight: 600; background: linear-gradient(135deg, #35703a, #3e6e96); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.app-header .brand { width: 56px; height: auto; }
+.app-header .brand { width: 56px; height: auto; border-radius: 12px; }
 .badge { background: #e2e8f0; padding: 4px 12px; border-radius: 40px; font-size: 0.8rem; color: #2c3e66; }
 .app-container { max-width: 1700px; margin: 0 auto; display: flex; gap: 24px; flex-wrap: wrap; }
 .main-panel { flex: 3; min-width: 280px; background: white; border-radius: 28px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column; }
@@ -60,6 +60,9 @@ thead th { position: sticky; top: 0; background: #f8fafd; z-index: 10; padding: 
 tbody td { padding: 8px 12px; border-bottom: 1px solid #ecf3fa; vertical-align: top; overflow: hidden; }
 tbody tr.data-row { height: 84px; }
 .cell-clip { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; line-height: 1.45; max-height: 64px; }
+#cellPop { position: fixed; z-index: 1200; display: none; min-width: 220px; max-width: 460px; max-height: 340px; overflow: auto; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 14px 34px rgba(0,0,0,0.18); padding: 12px 14px; font-size: 0.85rem; line-height: 1.6; color: #1f2937; word-break: break-word; white-space: pre-wrap; }
+#cellPop.term { background: #fffaf0; border-color: #f0d9a8; }
+#cellPop.trans { background: #f0fdf4; border-color: #b7e0bd; }
 .col-act { width: 44px; min-width: 44px; }
 .col-num { width: 64px; min-width: 64px; text-align: center; }
 .col-key { width: 190px; min-width: 190px; }
@@ -177,7 +180,7 @@ tbody tr.data-row { height: 84px; }
       <strong>💡 高效指南</strong><br>
       • <kbd>A</kbd> 添加选中文本为术语 &nbsp;• <kbd>D</kbd> 删除 &nbsp;• <kbd>E</kbd> 编辑<br>
       • <kbd>Q</kbd> 批量勾选模式（勾选行 + 回车批量加）<br>
-      • 行首「➕」一键添加整行；双击行号看整行全文<br>
+      • 行首「➕」一键添加整行；悬停单元格看本格全文，双击行号看整行全文<br>
       • 单击右侧术语 → 循环跳转匹配行<br>
       • 黄色=未审核 蓝色=已审核 绿色=译文命中<br>
       • Key/原文/译文列支持进阶筛选；崩溃自动恢复草稿（仅术语，原文需重新导入）
@@ -578,9 +581,9 @@ function rowHTML(id, pos) {
   for (const c of cols) {
     let v = String(row[c] ?? '');
     if (v.length > CELL_CAP) v = v.slice(0, CELL_CAP) + ' …(双击行号看全文)';
-    if (c === S.termCol) h += `<td class="${colClass(c)} term-cell" data-id="${id}"><div class="cell-clip">${highlightTerm(v)}</div></td>`;
-    else if (c === S.transCol) h += `<td class="${colClass(c)}"><div class="cell-clip">${highlightTrans(v)}</div></td>`;
-    else h += `<td class="${colClass(c)}"><div class="cell-clip">${escapeHtml(v)}</div></td>`;
+    if (c === S.termCol) h += `<td class="${colClass(c)} term-cell" data-id="${id}" data-col="${c}"><div class="cell-clip">${highlightTerm(v)}</div></td>`;
+    else if (c === S.transCol) h += `<td class="${colClass(c)}" data-col="${c}"><div class="cell-clip">${highlightTrans(v)}</div></td>`;
+    else h += `<td class="${colClass(c)}" data-col="${c}"><div class="cell-clip">${escapeHtml(v)}</div></td>`;
   }
   return h + '</tr>';
 }
@@ -813,6 +816,7 @@ function dialog(html) {
   ov.innerHTML = `<div class="dialog">${html}</div>`;
   document.body.appendChild(ov);
   activeDialog = ov;
+  if (typeof hideCellPop === 'function') hideCellPop();
   const close = () => { ov.remove(); if (activeDialog === ov) activeDialog = null; };
   ov.addEventListener('click', e => { if (e.target === ov) close(); });
   return { ov, close };
@@ -999,6 +1003,62 @@ wrap.addEventListener('dblclick', e => {
   const num = e.target.closest('.row-num');
   if (num) showRowDetail(+num.dataset.id);
 });
+
+// ───────────────── Full-text hover popover ─────────────────
+const cellPop = document.createElement('div');
+cellPop.id = 'cellPop';
+document.body.appendChild(cellPop);
+let popHideTimer = 0, popCurTd = null;
+function cellFullHTML(id, c) {
+  const full = String(S.rows[id]?.[c] ?? '');
+  if (c === S.termCol) return highlightTerm(full);
+  if (c === S.transCol) return highlightTrans(full);
+  return escapeHtml(full);
+}
+function hideCellPop() { cellPop.style.display = 'none'; popCurTd = null; }
+function showCellPop(td) {
+  const clip = td.querySelector('.cell-clip');
+  if (!clip) return;
+  const tr = td.closest('tr.data-row');
+  if (!tr) return;
+  const id = +tr.dataset.id, c = +td.dataset.col;
+  if (!Number.isInteger(id) || !Number.isInteger(c)) return;
+  const truncated = clip.scrollHeight > clip.clientHeight + 1 || String(S.rows[id]?.[c] ?? '').length > CELL_CAP;
+  if (!truncated) { hideCellPop(); return; }
+  popCurTd = td;
+  cellPop.className = c === S.termCol ? 'term' : c === S.transCol ? 'trans' : '';
+  cellPop.innerHTML = cellFullHTML(id, c);
+  cellPop.style.display = 'block';
+  cellPop.style.left = '0px'; cellPop.style.top = '0px';
+  const r = td.getBoundingClientRect();
+  const pw = cellPop.offsetWidth, ph = cellPop.offsetHeight, margin = 8;
+  let left = r.left;
+  if (left + pw > window.innerWidth - margin) left = window.innerWidth - pw - margin;
+  if (left < margin) left = margin;
+  let top;
+  if (r.bottom + ph + 4 <= window.innerHeight - margin) top = r.bottom + 4;
+  else if (r.top - ph - 4 >= margin) top = r.top - ph - 4;
+  else top = Math.max(margin, window.innerHeight - ph - margin);
+  cellPop.style.left = left + 'px';
+  cellPop.style.top = top + 'px';
+}
+wrap.addEventListener('mouseover', e => {
+  if (activeDialog) return;
+  const td = e.target.closest('td[data-col]');
+  if (!td) return;
+  if (td === popCurTd) { clearTimeout(popHideTimer); return; }
+  clearTimeout(popHideTimer);
+  showCellPop(td);
+});
+wrap.addEventListener('mouseout', e => {
+  const to = e.relatedTarget;
+  if (to && (cellPop.contains(to) || (popCurTd && popCurTd.contains(to)))) return;
+  clearTimeout(popHideTimer);
+  popHideTimer = setTimeout(hideCellPop, 140);
+});
+cellPop.addEventListener('mouseenter', () => clearTimeout(popHideTimer));
+cellPop.addEventListener('mouseleave', () => { clearTimeout(popHideTimer); popHideTimer = setTimeout(hideCellPop, 140); });
+wrap.addEventListener('scroll', hideCellPop);
 
 // ───────────────────── Import / Export ─────────────────────
 function pickFile(accept, cb) {
