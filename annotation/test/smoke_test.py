@@ -43,12 +43,16 @@ def make_xlsx():
     wb = Workbook()
     ws = wb.active
     ws.append(["ID", "English", "原文", "译文"])  # col index 2 (C) = term column (default termCol)
+    long_src = ("HEADMARK火焰风暴：对范围内所有敌人造成大量火焰伤害，并附加灼烧状态，持续若干回合，"
+                "灼烧期间每回合额外掉血；若目标已处于灼烧则刷新持续时间并叠加一层，最多叠加数层，"
+                "叠满后引发剧烈爆炸造成额外溅射伤害，溅射可再次点燃附近单位TAILMARK")
     data = [
         ["k1", "Fireball", "火球术", "火球"],
         ["k2", "Heal", "治疗术", "治疗"],
         ["k3", "FireballDup", "火球术", "火球"],
         ["k4", "Shield", "护盾术", "护盾"],
         ["k5", "Frost", "冰霜术", "冰霜"],
+        ["k6", "LongDesc", long_src, "long translation"],
     ]
     for r in data:
         ws.append(r)
@@ -142,6 +146,23 @@ def main():
             ok = th >= 4 and tr >= 1 and (srows == n_rows or srows == -1)
             return ok, "th=%s tr=%s S.rows=%s" % (th, tr, srows)
         run("import xlsx renders grid (headers+rows)", do_import)
+
+        # 3.5 full-text hover popover: shows complete text on a clipped cell, hidden on a short cell
+        def do_popover():
+            long_td = page.locator("td.term-cell:has-text('HEADMARK')").first
+            long_td.hover()
+            page.wait_for_timeout(250)
+            disp = page.eval_on_selector("#cellPop", "el => getComputedStyle(el).display")
+            pop_txt = page.locator("#cellPop").inner_text()
+            shows_full = (disp == "block") and ("TAILMARK" in pop_txt)
+            # moving onto a short, non-truncated cell must NOT show the popover
+            page.locator("td.term-cell:has-text('治疗术')").first.hover()
+            page.wait_for_timeout(250)
+            disp2 = page.eval_on_selector("#cellPop", "el => getComputedStyle(el).display")
+            hidden_on_short = (disp2 == "none")
+            return (shows_full and hidden_on_short), \
+                "long_disp=%s tail_shown=%s short_disp=%s" % (disp, "TAILMARK" in pop_txt, disp2)
+        run("hover popover shows full text (long) + hidden on short cell", do_popover)
 
         # 4. manual add term
         def do_add():
