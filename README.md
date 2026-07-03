@@ -20,10 +20,6 @@ English | [中文](README_ZH.md)
 
  Prepare source text according to the README input format and run the extraction scripts.
 
-## Status
-
- This repository is maintained or used according to the current README notes.
-
 ## Notes
 
  Terminology output should be reviewed by localization staff before delivery.
@@ -71,7 +67,3 @@ source.xlsx + glossary.xlsx
 ├── setup.bat               # automatic Python environment setup
 └── requirements.txt
 ```
-
-## Detailed Technical Notes
-
-This README keeps the English version of the core documentation. Code blocks, paths, commands, and file-layout examples are kept literal so they can be copied and checked against the repository.
